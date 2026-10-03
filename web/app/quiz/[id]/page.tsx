@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { DOMAINS } from "@/lib/catalog";
+import { useI18n } from "@/lib/i18n";
 
 interface QuizData {
   id: number;
@@ -20,6 +20,7 @@ interface Result {
 
 export default function QuizPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const { m } = useI18n();
   const [quiz, setQuiz] = useState<QuizData | null>(null);
   const [answers, setAnswers] = useState<number[]>([]);
   const [result, setResult] = useState<Result | null>(null);
@@ -34,7 +35,7 @@ export default function QuizPage({ params }: { params: Promise<{ id: string }> }
 
   async function submit() {
     if (answers.includes(-1)) {
-      setError("Réponds à toutes les questions.");
+      setError(m.quiz.answerAll);
       return;
     }
     setError("");
@@ -47,19 +48,19 @@ export default function QuizPage({ params }: { params: Promise<{ id: string }> }
     setAnswers(quiz!.questions.map(() => -1));
   }
 
-  if (!quiz) return <main className="page narrow muted">Chargement…</main>;
+  if (!quiz) return <main className="page narrow muted">{m.common.loading}</main>;
   const pct = result ? Math.round((100 * result.score) / result.total) : 0;
 
   return (
     <main className="page narrow">
       <p>
         <Link href="/competences#quiz" className="small">
-          ← Compétences
+          {m.quiz.back}
         </Link>
       </p>
       <div className="page-head">
         <div>
-          <span className="pill blue">{DOMAINS[quiz.domain]?.label}</span>
+          <span className="pill blue">{m.catalog.domains[quiz.domain]?.label}</span>
           <h1 style={{ marginTop: "0.5rem" }}>{quiz.title}</h1>
           <p className="sub">{quiz.description}</p>
         </div>
@@ -68,12 +69,12 @@ export default function QuizPage({ params }: { params: Promise<{ id: string }> }
       {result ? (
         <div className={pct >= 80 ? "success" : "card"} style={{ fontSize: "1rem" }}>
           <strong>
-            {result.score} / {result.total} — {pct} %
+            {m.quiz.score(result.score, result.total, pct)}
           </strong>{" "}
-          {pct >= 80 ? "Bravo !" : pct >= 50 ? "Pas mal, relis les explications ci-dessous." : "Les explications ci-dessous vont t'aider."}
+          {pct >= 80 ? m.quiz.bravo : pct >= 50 ? m.quiz.notBad : m.quiz.help}
           <div className="row" style={{ marginTop: "0.6rem" }}>
             <button className="ghost small" onClick={retry}>
-              Refaire le quiz
+              {m.quiz.redo}
             </button>
           </div>
         </div>
@@ -128,7 +129,7 @@ export default function QuizPage({ params }: { params: Promise<{ id: string }> }
         <>
           {error ? <div className="error" style={{ marginTop: "1rem" }}>{error}</div> : null}
           <button onClick={submit} style={{ marginTop: "1rem" }}>
-            Valider mes réponses
+            {m.quiz.submit}
           </button>
         </>
       ) : null}

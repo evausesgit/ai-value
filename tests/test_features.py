@@ -93,3 +93,32 @@ def test_skills(world):
         "donnees": 1,
     }
     assert c.put("/skills", json={"prompting": 9}).status_code == 400
+
+
+def test_errors_and_library_quizzes_follow_language(world, db):
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    r = TestClient(app).post(
+        "/auth/login",
+        json={"email": "dev@acme.fr", "password": "faux"},
+        headers={"Accept-Language": "en-GB,en;q=0.9"},
+    )
+    assert r.json()["detail"] == "Incorrect email or password."
+    r = TestClient(app).post("/auth/login", json={"email": "dev@acme.fr", "password": "faux"})
+    assert r.json()["detail"] == "Email ou mot de passe incorrect."
+
+    ensure_library(db)
+    c = client_for("dev@acme.fr")
+    assert c.put("/auth/me/lang", json={"lang": "en"}).json()["lang"] == "en"
+    titles = {q["title"] for q in c.get("/quizzes").json()}
+    assert "Prompting basics" in titles
+    qid = next(q["id"] for q in c.get("/quizzes").json() if q["title"] == "Prompting basics")
+    detail = c.get(f"/quizzes/{qid}").json()
+    assert detail["questions"][0]["prompt"].startswith("Which element")
+    res = c.post(f"/quizzes/{qid}/attempt", json={"answers": [1] * 5}).json()
+    assert res["corrections"][0]["explanation"].startswith("Context")
+    # Message paramétré.
+    r = c.put("/me/tools", json={"usages": {"99999": "daily"}}, headers={"Accept-Language": "en"})
+    assert r.json()["detail"] == "Unknown tool: 99999"

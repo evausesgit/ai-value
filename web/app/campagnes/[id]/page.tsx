@@ -7,7 +7,8 @@ import { BarList, Delta, Kpi } from "@/components/charts";
 import SkillsEditor from "@/components/SkillsEditor";
 import ToolsEditor from "@/components/ToolsEditor";
 import { api, type Campaign, type CampaignItem, type CampaignSummary, type UseCase } from "@/lib/api";
-import { BLOCKERS, CAMPAIGN_ITEMS, DOMAINS, USAGE_LEVELS, fmtDay, fmtMinutes, fmtNum } from "@/lib/catalog";
+import { fmtDay, fmtMinutes, fmtNum } from "@/lib/catalog";
+import { useI18n } from "@/lib/i18n";
 import { hasRole, useSession } from "@/lib/session";
 
 interface Results {
@@ -22,6 +23,7 @@ interface Results {
 export default function CampaignPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { me } = useSession();
+  const { m } = useI18n();
   const [mine, setMine] = useState<Campaign | null>(null);
   const [notMine, setNotMine] = useState(false);
   const [tab, setTab] = useState<"update" | "results" | null>(null);
@@ -39,11 +41,11 @@ export default function CampaignPage({ params }: { params: Promise<{ id: string 
     else if (notMine) setTab(isLead ? "results" : "update");
   }, [mine, notMine, me, isLead, tab]);
 
-  if (!me || tab === null) return <main className="page narrow muted">Chargement…</main>;
+  if (!me || tab === null) return <main className="page narrow muted">{m.common.loading}</main>;
   if (!mine && !isLead)
     return (
       <main className="page narrow">
-        <div className="card empty">Cette campagne ne te concerne pas.</div>
+        <div className="card empty">{m.campaigns.notForYou}</div>
       </main>
     );
 
@@ -51,16 +53,16 @@ export default function CampaignPage({ params }: { params: Promise<{ id: string 
     <main className="page">
       <p>
         <Link href={isLead ? "/campagnes" : "/"} className="small">
-          ← {isLead ? "Campagnes" : "Mon espace"}
+          {isLead ? m.campaigns.backList : m.campaigns.backHome}
         </Link>
       </p>
       {isLead && mine ? (
         <div className="tabs">
           <button className={tab === "update" ? "on" : ""} onClick={() => setTab("update")}>
-            Ma mise à jour
+            {m.campaigns.myUpdate}
           </button>
           <button className={tab === "results" ? "on" : ""} onClick={() => setTab("results")}>
-            Résultats
+            {m.campaigns.results}
           </button>
         </div>
       ) : null}
@@ -73,6 +75,8 @@ export default function CampaignPage({ params }: { params: Promise<{ id: string 
 // --- Côté collaborateur -----------------------------------------------------------
 
 function MyUpdate({ initial }: { initial: Campaign }) {
+  const { m } = useI18n();
+  const t = m.campaigns;
   const [c, setC] = useState(initial);
   const [error, setError] = useState("");
   const [sent, setSent] = useState(false);
@@ -102,7 +106,7 @@ function MyUpdate({ initial }: { initial: Campaign }) {
         <div>
           <h1>{c.title}</h1>
           <p className="sub">
-            Demandé par {c.author ?? "ton équipe de pilotage"} · {c.open ? `à faire avant le ${fmtDay(c.closes_on)}` : "campagne close"}
+            {t.requestedBy(c.author)} · {c.open ? t.beforeDate(fmtDay(c.closes_on)) : t.closedLabel}
           </p>
         </div>
       </div>
@@ -111,10 +115,11 @@ function MyUpdate({ initial }: { initial: Campaign }) {
           <p style={{ margin: 0, whiteSpace: "pre-wrap" }}>{c.message}</p>
         </div>
       ) : null}
-      {sent ? <div className="success" style={{ marginTop: "1rem" }}>Merci ! Ta mise à jour est envoyée.</div> : null}
+      {sent ? <div className="success" style={{ marginTop: "1rem" }}>{t.thanksSent}</div> : null}
       {c.me?.completed_at && !sent ? (
         <div className="success" style={{ marginTop: "1rem" }}>
-          Envoyée le {fmtDay(c.me.completed_at)}.{c.open ? " Tu peux encore modifier puis renvoyer jusqu'à la date limite." : ""}
+          {t.sentOn(fmtDay(c.me.completed_at))}
+          {c.open ? t.canResend : ""}
         </div>
       ) : null}
 
@@ -122,10 +127,10 @@ function MyUpdate({ initial }: { initial: Campaign }) {
         <div className="card" key={item} style={{ marginTop: "1rem" }}>
           <div className="card-head">
             <h2>
-              {i + 1}. {CAMPAIGN_ITEMS[item].label}
-              <span className="muted small" style={{ fontWeight: 400 }}> — {CAMPAIGN_ITEMS[item].hint}</span>
+              {i + 1}. {m.catalog.campaignItems[item].label}
+              <span className="muted small" style={{ fontWeight: 400 }}> — {m.catalog.campaignItems[item].hint}</span>
             </h2>
-            {done.has(item) ? <span className="pill good">✓ Fait</span> : null}
+            {done.has(item) ? <span className="pill good">{t.done}</span> : null}
           </div>
           {item === "tools" ? <ToolsEditor compact /> : null}
           {item === "skills" ? <SkillsEditor /> : null}
@@ -136,7 +141,7 @@ function MyUpdate({ initial }: { initial: Campaign }) {
             !readOnly && (
               <div className="row" style={{ marginTop: "0.75rem" }}>
                 <button className={done.has(item) ? "on" : ""} onClick={() => toggle(item)}>
-                  {done.has(item) ? "✓ C'est à jour" : "C'est à jour"}
+                  {done.has(item) ? t.upToDateOn : t.upToDate}
                 </button>
               </div>
             )
@@ -149,10 +154,10 @@ function MyUpdate({ initial }: { initial: Campaign }) {
           {error ? <div className="error">{error}</div> : null}
           <div className="row" style={{ justifyContent: "space-between" }}>
             <span className="muted small">
-              {done.size} / {c.items.length} étapes validées
+              {t.stepsDone(done.size, c.items.length)}
             </span>
             <button onClick={submit} disabled={!allDone}>
-              {c.me?.completed_at ? "Renvoyer ma mise à jour" : "Envoyer ma mise à jour"}
+              {c.me?.completed_at ? t.resend : t.send}
             </button>
           </div>
         </div>
@@ -162,6 +167,8 @@ function MyUpdate({ initial }: { initial: Campaign }) {
 }
 
 function MyUseCases() {
+  const { m } = useI18n();
+  const t = m.campaigns;
   const [items, setItems] = useState<UseCase[] | null>(null);
   useEffect(() => {
     api<UseCase[]>("/usecases?mine=true").then(setItems);
@@ -170,37 +177,38 @@ function MyUseCases() {
   return (
     <div>
       <p className="small muted">
-        Vérifie que tes use cases sont à jour, et surtout le <strong>temps gagné par semaine</strong> : c&apos;est ce qui permet
-        de mesurer l&apos;impact. Si tu utilises le use case d&apos;un collègue, clique « Je l&apos;utilise aussi » dans le{" "}
+        {t.ucIntro1}
+        <strong>{t.ucIntroStrong}</strong>
+        {t.ucIntro2}
         <Link href="/usages" target="_blank">
-          catalogue
+          {t.catalogLink}
         </Link>
         .
       </p>
       {items === null ? (
-        <p className="muted">Chargement…</p>
+        <p className="muted">{m.common.loading}</p>
       ) : items.length === 0 ? (
-        <div className="empty small">Tu n&apos;as pas encore partagé de use case.</div>
+        <div className="empty small">{t.noUseCase}</div>
       ) : (
         <table>
           <tbody>
             {items.map((u) => (
               <tr key={u.id}>
                 <td>{u.title}</td>
-                <td className="num">{fmtMinutes(u.minutes_saved_per_week)} / sem.</td>
+                <td className="num">{fmtMinutes(u.minutes_saved_per_week)} {m.common.perWeek}</td>
                 <td className="num">
                   <Link href={`/usages/${u.id}/modifier`} target="_blank" className="small">
-                    Modifier
+                    {m.common.edit}
                   </Link>
                 </td>
               </tr>
             ))}
             <tr>
               <td>
-                <strong>Total</strong>
+                <strong>{t.total}</strong>
               </td>
               <td className="num">
-                <strong>{fmtMinutes(total)} / sem.</strong>
+                <strong>{fmtMinutes(total)} {m.common.perWeek}</strong>
               </td>
               <td />
             </tr>
@@ -209,10 +217,10 @@ function MyUseCases() {
       )}
       <div className="row" style={{ marginTop: "0.6rem" }}>
         <Link href="/usages/nouveau" target="_blank" className="btn ghost small">
-          + Ajouter un use case
+          {t.addUseCase}
         </Link>
         <button className="ghost small" onClick={() => api<UseCase[]>("/usecases?mine=true").then(setItems)}>
-          Rafraîchir
+          {t.refresh}
         </button>
       </div>
     </div>
@@ -220,19 +228,21 @@ function MyUseCases() {
 }
 
 function Checkin({ campaign, onSaved, disabled }: { campaign: Campaign; onSaved: (c: Campaign) => void; disabled: boolean }) {
-  const m = campaign.me;
+  const { m } = useI18n();
+  const t = m.campaigns;
+  const mine = campaign.me;
   const [form, setForm] = useState({
-    usage_level: m?.usage_level ?? -1,
-    satisfaction: m?.satisfaction ?? 0,
-    blockers: m?.blockers ?? [],
-    comment: m?.comment ?? "",
+    usage_level: mine?.usage_level ?? -1,
+    satisfaction: mine?.satisfaction ?? 0,
+    blockers: mine?.blockers ?? [],
+    comment: mine?.comment ?? "",
   });
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
 
   async function save() {
     if (form.usage_level < 0 || form.satisfaction < 1) {
-      setError("Réponds aux deux premières questions.");
+      setError(t.checkinRequired);
       return;
     }
     setError("");
@@ -244,12 +254,12 @@ function Checkin({ campaign, onSaved, disabled }: { campaign: Campaign; onSaved:
 
   return (
     <fieldset disabled={disabled} style={{ border: "none", padding: 0, margin: 0 }}>
-      <p className="small muted">Anonymisé : seuls des agrégats d&apos;au moins 3 personnes sont montrés.</p>
+      <p className="small muted">{t.checkinAnon}</p>
       {error ? <div className="error">{error}</div> : null}
       <div className="field">
-        <label>En ce moment, tu utilises l&apos;IA…</label>
+        <label>{t.checkinUsage}</label>
         <div className="scale">
-          {USAGE_LEVELS.map((l, i) => (
+          {m.catalog.usageLevels.map((l, i) => (
             <button key={l} type="button" className={form.usage_level === i ? "on" : ""} onClick={() => setForm({ ...form, usage_level: i })}>
               {l}
             </button>
@@ -257,9 +267,9 @@ function Checkin({ campaign, onSaved, disabled }: { campaign: Campaign; onSaved:
         </div>
       </div>
       <div className="field">
-        <label>Es-tu satisfait·e de ce que l&apos;IA t&apos;apporte ?</label>
+        <label>{t.checkinSatisfaction}</label>
         <div className="scale">
-          {["Pas du tout", "Peu", "Moyennement", "Plutôt", "Très"].map((l, i) => (
+          {m.catalog.satisfaction.map((l, i) => (
             <button key={l} type="button" className={form.satisfaction === i + 1 ? "on" : ""} onClick={() => setForm({ ...form, satisfaction: i + 1 })}>
               {l}
             </button>
@@ -268,10 +278,10 @@ function Checkin({ campaign, onSaved, disabled }: { campaign: Campaign; onSaved:
       </div>
       <div className="field">
         <label>
-          Qu&apos;est-ce qui te freine ? <span className="hint">(facultatif)</span>
+          {t.checkinBlockers} <span className="hint">{t.optional}</span>
         </label>
         <div className="pills">
-          {Object.entries(BLOCKERS).map(([k, l]) => (
+          {Object.entries(m.catalog.blockers).map(([k, l]) => (
             <button key={k} type="button" className={`ghost small ${form.blockers.includes(k) ? "on" : ""}`} onClick={() => toggleBlocker(k)}>
               {l}
             </button>
@@ -280,13 +290,13 @@ function Checkin({ campaign, onSaved, disabled }: { campaign: Campaign; onSaved:
       </div>
       <div className="field">
         <label htmlFor="comment">
-          Un mot ? <span className="hint">(facultatif)</span>
+          {t.checkinComment} <span className="hint">{t.optional}</span>
         </label>
-        <textarea id="comment" value={form.comment} onChange={(e) => setForm({ ...form, comment: e.target.value })} placeholder="Une réussite, une difficulté, une idée…" style={{ minHeight: 60 }} />
+        <textarea id="comment" value={form.comment} onChange={(e) => setForm({ ...form, comment: e.target.value })} placeholder={t.checkinCommentPh} style={{ minHeight: 60 }} />
       </div>
       <div className="row">
-        <button onClick={save}>{m?.satisfaction ? "Mettre à jour mon ressenti" : "Enregistrer mon ressenti"}</button>
-        {saved ? <span className="pill good">✓ Enregistré</span> : null}
+        <button onClick={save}>{mine?.satisfaction ? t.checkinUpdate : t.checkinSave}</button>
+        {saved ? <span className="pill good">✓ {m.common.saved}</span> : null}
       </div>
     </fieldset>
   );
@@ -295,6 +305,8 @@ function Checkin({ campaign, onSaved, disabled }: { campaign: Campaign; onSaved:
 // --- Côté demandeur ----------------------------------------------------------------
 
 function ResultsView({ id }: { id: string }) {
+  const { m } = useI18n();
+  const t = m.campaigns;
   const router = useRouter();
   const [r, setR] = useState<Results | null>(null);
   const [error, setError] = useState("");
@@ -307,11 +319,11 @@ function ResultsView({ id }: { id: string }) {
   useEffect(load, [load]);
 
   if (error) return <div className="error">{error}</div>;
-  if (!r) return <p className="muted">Chargement…</p>;
+  if (!r) return <p className="muted">{m.common.loading}</p>;
   const { campaign: c, summary: s, previous: p } = r;
 
   async function close() {
-    if (!confirm("Clore la campagne ? Plus personne ne pourra répondre.")) return;
+    if (!confirm(t.confirmClose)) return;
     await api(`/campaigns/${id}/close`, { method: "POST" });
     load();
   }
@@ -322,13 +334,13 @@ function ResultsView({ id }: { id: string }) {
     load();
   }
   async function remove() {
-    if (!confirm("Supprimer la campagne et toutes ses réponses ?")) return;
+    if (!confirm(t.confirmDelete)) return;
     await api(`/campaigns/${id}`, { method: "DELETE" });
     router.push("/campagnes");
   }
   async function copyReminder() {
     const url = `${window.location.origin}/campagnes/${id}`;
-    const text = `Petit rappel : « ${c.title} » — 5 minutes pour mettre à jour tes outils IA, ton auto-évaluation et tes use cases, avant le ${fmtDay(c.closes_on)}. ${url}`;
+    const text = t.reminder(c.title, fmtDay(c.closes_on), url);
     await navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
@@ -339,81 +351,81 @@ function ResultsView({ id }: { id: string }) {
       <div className="page-head">
         <div>
           <div className="pills" style={{ marginBottom: "0.4rem" }}>
-            {c.open ? <span className="pill blue">● En cours</span> : <span className="pill">■ Close</span>}
+            {c.open ? <span className="pill blue">{t.open}</span> : <span className="pill">{t.closed}</span>}
           </div>
           <h1>{c.title}</h1>
           <p className="sub">
-            Lancée le {c.opens_at ? fmtDay(c.opens_at) : "—"} par {c.author ?? "—"} · {c.open ? `jusqu'au ${fmtDay(c.closes_on)}` : `clôture le ${fmtDay(c.closes_on)}`}
-            {p ? ` · comparée à « ${p.title} »` : ""}
+            {t.launchedOn(c.opens_at ? fmtDay(c.opens_at) : "—", c.author ?? "—")} · {c.open ? t.until(fmtDay(c.closes_on)) : t.closesOn(fmtDay(c.closes_on))}
+            {p ? ` · ${t.comparedTo(p.title)}` : ""}
           </p>
         </div>
         {r.can_manage ? (
           <div className="row">
-            <input type="date" value={extendTo} onChange={(e) => setExtendTo(e.target.value)} style={{ width: "auto" }} aria-label="Nouvelle date limite" />
+            <input type="date" value={extendTo} onChange={(e) => setExtendTo(e.target.value)} style={{ width: "auto" }} aria-label={t.newDeadline} />
             <button className="ghost small" onClick={extend} disabled={!extendTo}>
-              {c.open ? "Prolonger" : "Rouvrir"}
+              {c.open ? t.extend : t.reopen}
             </button>
             {c.open ? (
               <button className="ghost small" onClick={close}>
-                Clore
+                {t.close}
               </button>
             ) : null}
             <button className="danger small" onClick={remove}>
-              Supprimer
+              {m.common.delete}
             </button>
           </div>
         ) : null}
       </div>
 
       <div className="grid g4">
-        <Kpi label="Participation" value={s.participation} unit=" %" foot={`${s.respondents} / ${s.targeted} ont répondu`} />
+        <Kpi label={t.participation} value={s.participation} unit=" %" foot={t.respondedFoot(s.respondents, s.targeted)} />
         <Kpi
-          label="Adoption"
+          label={t.adoption}
           value={s.adoption_pct}
           unit=" %"
-          foot={<>répondants utilisant un outil chaque semaine {p ? <Delta now={s.adoption_pct} before={p.adoption_pct} unit=" pts" /> : null}</>}
+          foot={<>{t.adoptionFoot} {p ? <Delta now={s.adoption_pct} before={p.adoption_pct} unit=" pts" /> : null}</>}
         />
         <Kpi
-          label="Temps gagné"
+          label={t.timeSaved}
           value={s.hours_saved}
-          unit=" h/sem."
-          foot={<>soit {fmtNum(s.hours_saved_avg, 1)} h par personne {p ? <Delta now={s.hours_saved_avg} before={p.hours_saved_avg} unit=" h" digits={1} /> : null}</>}
+          unit={` h ${m.common.perWeek}`}
+          foot={<>{t.timeSavedFoot(fmtNum(s.hours_saved_avg, 1))} {p ? <Delta now={s.hours_saved_avg} before={p.hours_saved_avg} unit=" h" digits={1} /> : null}</>}
         />
         <Kpi
-          label="Satisfaction"
+          label={t.satisfaction}
           value={s.satisfaction}
           unit=" / 5"
           digits={1}
-          foot={s.satisfaction === null ? (c.items.includes("checkin") ? "Masqué : moins de 3 réponses" : "Non demandé") : p ? <Delta now={s.satisfaction} before={p.satisfaction} digits={1} /> : `${s.checkin_respondents} réponses`}
+          foot={s.satisfaction === null ? (c.items.includes("checkin") ? m.common.hiddenSmall : t.notAsked) : p ? <Delta now={s.satisfaction} before={p.satisfaction} digits={1} /> : m.common.answers(s.checkin_respondents)}
         />
       </div>
 
       <div className="grid g2 section">
         <div className="card">
           <div className="card-head">
-            <h2>Compétences déclarées</h2>
-            <span className="muted small">niveau moyen {fmtNum(s.skills_avg, 1)} / 3 {p ? <Delta now={s.skills_avg} before={p.skills_avg} digits={1} /> : null}</span>
+            <h2>{t.declaredSkills}</h2>
+            <span className="muted small">{t.avgLevel(fmtNum(s.skills_avg, 1))} {p ? <Delta now={s.skills_avg} before={p.skills_avg} digits={1} /> : null}</span>
           </div>
           <BarList
             rows={Object.entries(s.skills)
               .filter(([, v]) => v !== null)
-              .map(([d, v]) => ({ label: DOMAINS[d]?.label ?? d, value: v as number }))}
+              .map(([d, v]) => ({ label: m.catalog.domains[d]?.label ?? d, value: v as number }))}
             max={3}
             format={(v) => `${fmtNum(v, 1)} / 3`}
           />
         </div>
         <div className="card">
           <div className="card-head">
-            <h2>Freins remontés</h2>
+            <h2>{t.blockers}</h2>
           </div>
           {s.blockers === null ? (
-            <div className="empty small">{c.items.includes("checkin") ? "Masqué : moins de 3 réponses." : "Ressenti non demandé."}</div>
+            <div className="empty small">{c.items.includes("checkin") ? m.common.hiddenSmallDot : t.checkinNotAsked}</div>
           ) : (
-            <BarList rows={s.blockers.map((b) => ({ label: BLOCKERS[b.blocker] ?? b.blocker, value: b.count }))} format={(v) => `${v}`} />
+            <BarList rows={s.blockers.map((b) => ({ label: m.catalog.blockers[b.blocker] ?? b.blocker, value: b.count }))} format={(v) => `${v}`} />
           )}
           {s.comments && s.comments.length ? (
             <>
-              <h3 style={{ marginTop: "1rem" }}>Verbatims</h3>
+              <h3 style={{ marginTop: "1rem" }}>{t.verbatims}</h3>
               <ul style={{ paddingLeft: "1.1rem", margin: 0 }}>
                 {s.comments.slice(0, 8).map((t, i) => (
                   <li key={i} className="small" style={{ marginBottom: "0.35rem" }}>
@@ -428,33 +440,33 @@ function ResultsView({ id }: { id: string }) {
 
       {r.by_team.length ? (
         <div className="card section">
-          <h2>Par équipe</h2>
+          <h2>{t.byTeam}</h2>
           <div className="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>Équipe</th>
-                  <th className="num">Réponses</th>
-                  <th className="num">Adoption</th>
-                  <th className="num">Temps gagné</th>
-                  <th className="num">Compétences</th>
-                  <th className="num">Satisf.</th>
+                  <th>{t.team}</th>
+                  <th className="num">{t.responses}</th>
+                  <th className="num">{t.adoption}</th>
+                  <th className="num">{t.timeSaved}</th>
+                  <th className="num">{t.skillsCol}</th>
+                  <th className="num">{t.satisfactionShort}</th>
                 </tr>
               </thead>
               <tbody>
-                {r.by_team.map((t) => (
-                  <tr key={t.team}>
+                {r.by_team.map((row) => (
+                  <tr key={row.team}>
                     <td>
-                      <strong>{t.team}</strong>
+                      <strong>{row.team}</strong>
                     </td>
                     <td className="num">
-                      {t.respondents} / {t.targeted}
+                      {row.respondents} / {row.targeted}
                     </td>
-                    <td className="num">{fmtNum(t.adoption_pct, 0, " %")}</td>
-                    <td className="num">{fmtNum(t.hours_saved, 0, " h/sem.")}</td>
-                    <td className="num">{fmtNum(t.skills_avg, 1)}</td>
-                    <td className="num" title={t.satisfaction === null ? "Masqué : moins de 3 réponses" : ""}>
-                      {fmtNum(t.satisfaction, 1)}
+                    <td className="num">{fmtNum(row.adoption_pct, 0, " %")}</td>
+                    <td className="num">{fmtNum(row.hours_saved, 0, ` h ${m.common.perWeek}`)}</td>
+                    <td className="num">{fmtNum(row.skills_avg, 1)}</td>
+                    <td className="num" title={row.satisfaction === null ? m.common.hiddenSmall : ""}>
+                      {fmtNum(row.satisfaction, 1)}
                     </td>
                   </tr>
                 ))}
@@ -466,15 +478,15 @@ function ResultsView({ id }: { id: string }) {
 
       <div className="card section">
         <div className="card-head">
-          <h2>En attente ({r.pending.length})</h2>
+          <h2>{t.pending(r.pending.length)}</h2>
           {c.open && r.pending.length ? (
             <button className="ghost small" onClick={copyReminder}>
-              {copied ? "Copié ✓" : "Copier un message de relance"}
+              {copied ? m.common.copied : t.copyReminder}
             </button>
           ) : null}
         </div>
         {r.pending.length === 0 ? (
-          <div className="empty small">Tout le monde a répondu 🎉</div>
+          <div className="empty small">{t.allAnswered}</div>
         ) : (
           <div className="pills">
             {r.pending.map((x) => (

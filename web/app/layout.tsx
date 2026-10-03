@@ -2,13 +2,14 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import Nav from "./Nav";
+import { I18nProvider } from "@/lib/i18n";
 import { SessionProvider } from "@/lib/session";
 
 const inter = Inter({ subsets: ["latin"], variable: "--ff-sans", display: "swap" });
 
 export const metadata: Metadata = {
   title: "AI Value",
-  description: "Suivre l'adoption de l'IA dans les équipes : usages, connaissances, feedback.",
+  description: "Suivre l'adoption de l'IA dans les équipes · Track AI adoption in teams.",
 };
 
 export const viewport: Viewport = {
@@ -24,10 +25,12 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="fr" className={inter.variable}>
       <body>
-        <SessionProvider>
-          <Nav />
-          {children}
-        </SessionProvider>
+        <I18nProvider>
+          <SessionProvider>
+            <Nav />
+            {children}
+          </SessionProvider>
+        </I18nProvider>
       </body>
     </html>
   );

@@ -7,6 +7,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { fmtNum } from "@/lib/catalog";
+import { useI18n } from "@/lib/i18n";
 
 export function Kpi({
   label,
@@ -34,9 +35,10 @@ export function Kpi({
 }
 
 export function Delta({ now, before, unit = "", digits = 0 }: { now: number | null; before: number | null; unit?: string; digits?: number }) {
+  const { m } = useI18n();
   if (now === null || before === null) return null;
   const d = now - before;
-  if (Math.abs(d) < 10 ** -digits / 2) return <span className="muted">stable</span>;
+  if (Math.abs(d) < 10 ** -digits / 2) return <span className="muted">{m.common.stable}</span>;
   return (
     <span className={d > 0 ? "delta-up" : "delta-down"}>
       {d > 0 ? "▲ +" : "▼ "}
@@ -56,8 +58,9 @@ export function BarList({
   max?: number;
   format?: (v: number) => string;
 }) {
+  const { m: t } = useI18n();
   const m = max ?? Math.max(1, ...rows.map((r) => r.value));
-  if (!rows.length) return <div className="empty small">Pas encore de données.</div>;
+  if (!rows.length) return <div className="empty small">{t.common.noData}</div>;
   return (
     <div className="bars">
       {rows.map((r) => (
@@ -74,9 +77,9 @@ export function BarList({
 }
 
 const FREQ_SERIES = [
-  { key: "daily", label: "Tous les jours", color: "var(--seq-600)" },
-  { key: "weekly", label: "Chaque semaine", color: "var(--seq-400)" },
-  { key: "monthly", label: "De temps en temps", color: "var(--seq-200)" },
+  { key: "daily", color: "var(--seq-600)" },
+  { key: "weekly", color: "var(--seq-400)" },
+  { key: "monthly", color: "var(--seq-200)" },
 ] as const;
 
 /** Outils : barres empilées par fréquence (rampe ordinale bleue, foncé = fréquent). */
@@ -87,14 +90,15 @@ export function ToolBars({
   rows: { tool: string; daily: number; weekly: number; monthly: number }[];
   members: number;
 }) {
-  if (!rows.length) return <div className="empty small">Aucun outil déclaré pour l'instant.</div>;
+  const { m } = useI18n();
+  if (!rows.length) return <div className="empty small">{m.charts.noTools}</div>;
   const max = Math.max(1, ...rows.map((r) => r.daily + r.weekly + r.monthly));
   return (
     <>
       <div className="bars">
         {rows.map((r) => {
           const total = r.daily + r.weekly + r.monthly;
-          const title = `${r.tool} — ${r.daily} tous les jours, ${r.weekly} chaque semaine, ${r.monthly} de temps en temps (${fmtNum((100 * total) / Math.max(1, members))} % des membres)`;
+          const title = m.charts.toolTitle(r.tool, r.daily, r.weekly, r.monthly, fmtNum((100 * total) / Math.max(1, members)));
           return (
             <div className="bar-row" key={r.tool} title={title}>
               <span className="name">{r.tool}</span>
@@ -118,7 +122,7 @@ export function ToolBars({
         {FREQ_SERIES.map((s) => (
           <span key={s.key}>
             <i style={{ background: s.color }} />
-            {s.label}
+            {m.catalog.frequencies[s.key]}
           </span>
         ))}
       </div>
@@ -143,6 +147,7 @@ export function TrendChart({
   digits?: number;
   height?: number;
 }) {
+  const { m } = useI18n();
   const [hover, setHover] = useState<number | null>(null);
   const ref = useRef<SVGSVGElement>(null);
   const box = useRef<HTMLDivElement>(null);
@@ -241,7 +246,7 @@ export function TrendChart({
           }}
         >
           <strong>{h.title}</strong>
-          {label} : {h.value === null ? "masqué (moins de 3 réponses)" : `${fmtNum(h.value, digits)}${unit}`}
+          {label} : {h.value === null ? m.charts.hidden : `${fmtNum(h.value, digits)}${unit}`}
           {h.note ? <div className="muted">{h.note}</div> : null}
         </div>
       ) : null}
@@ -251,6 +256,7 @@ export function TrendChart({
 
 /** Mini-courbe sans axes pour les tableaux. */
 export function Sparkline({ values, max = 100 }: { values: (number | null)[]; max?: number }) {
+  const { m } = useI18n();
   const W = 90;
   const H = 24;
   const x = (i: number) => (i * W) / Math.max(1, values.length - 1);
@@ -262,7 +268,7 @@ export function Sparkline({ values, max = 100 }: { values: (number | null)[]; ma
   });
   const last = [...values].reverse().find((v) => v !== null);
   return (
-    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} aria-label={`Tendance, dernière valeur ${fmtNum(last ?? null)} %`}>
+    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} aria-label={m.charts.trendAria(fmtNum(last ?? null))}>
       <path d={d} fill="none" stroke="var(--series-1)" strokeWidth={2} strokeLinejoin="round" />
     </svg>
   );
@@ -280,6 +286,7 @@ export function Heatmap({
   rows: { label: string; values: { avg: number | null; n: number }[] }[];
   max?: number;
 }) {
+  const { m } = useI18n();
   return (
     <div className="table-wrap">
       <table className="heat">
@@ -298,7 +305,7 @@ export function Heatmap({
               {r.values.map((v, i) => {
                 if (v.avg === null)
                   return (
-                    <td key={columns[i].key} style={{ background: "var(--seq-empty)", color: "var(--muted)" }} title="Aucune auto-évaluation">
+                    <td key={columns[i].key} style={{ background: "var(--seq-empty)", color: "var(--muted)" }} title={m.dash.noAssessment}>
                       —
                     </td>
                   );
@@ -307,7 +314,7 @@ export function Heatmap({
                   <td
                     key={columns[i].key}
                     style={{ background: HEAT_STEPS[step], color: `var(--heat-ink-${step})` }}
-                    title={`${r.label} · ${columns[i].label} : ${fmtNum(v.avg, 1)} / ${max} (${v.n} réponses)`}
+                    title={`${r.label} · ${columns[i].label} : ${fmtNum(v.avg, 1)} / ${max} (${m.charts.responsesTitle(v.n)})`}
                   >
                     {fmtNum(v.avg, 1)}
                   </td>
@@ -318,11 +325,11 @@ export function Heatmap({
         </tbody>
       </table>
       <div className="legend">
-        <span>Niveau moyen :</span>
+        <span>{m.dash.levelAvg}</span>
         {["0", "1", "2", "3"].map((l, i) => (
           <span key={l}>
             <i style={{ background: HEAT_STEPS[Math.min(5, i * 2)] }} />
-            {["Découverte", "Usage", "Maîtrise", "Référent"][i]}
+            {m.catalog.skillLevels[i]}
           </span>
         ))}
       </div>

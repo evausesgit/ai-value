@@ -12,6 +12,9 @@ il lance une campagne (outils, auto-évaluation, use cases et temps gagné, ress
 résultats. Chaque campagne devient un point sur les courbes d'évolution. Les **team leads** ont le tableau de
 bord de leur équipe, et le **management** la vue organisation, avec comparaison des équipes et carte des compétences.
 
+Multilingue : français et anglais (sélecteur FR/EN, langue mémorisée dans le profil). Ajouter une
+langue revient à ajouter un dictionnaire (voir `ARCHITECTURE.md`).
+
 Multi-entreprise : une organisation par entreprise, données isolées. Le superadmin crée les
 organisations, et chaque admin invite ses équipes par lien.
 

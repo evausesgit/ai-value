@@ -7,22 +7,25 @@ import Link from "next/link";
 import { useState } from "react";
 import { BarList, Delta, Kpi, ToolBars, TrendChart } from "@/components/charts";
 import type { EvolutionPoint, ScopeStats } from "@/lib/api";
-import { BLOCKERS, CATEGORIES, DOMAINS, FEEDBACK_STATUSES, SKILL_LEVELS, fmtDay, fmtNum } from "@/lib/catalog";
+import { currentLocale, useI18n } from "@/lib/i18n";
+import { fmtDay, fmtNum } from "@/lib/catalog";
 
 type Metric = "adoption_pct" | "hours_saved_avg" | "skills_avg" | "satisfaction" | "participation";
-const METRICS: { key: Metric; label: string; unit: string; digits: number; max?: number }[] = [
-  { key: "adoption_pct", label: "Adoption", unit: " %", digits: 0, max: 100 },
-  { key: "hours_saved_avg", label: "Temps gagné / pers. / sem.", unit: " h", digits: 1 },
-  { key: "skills_avg", label: "Niveau de compétences (0-3)", unit: "", digits: 1, max: 3 },
-  { key: "satisfaction", label: "Satisfaction (1-5)", unit: "", digits: 1, max: 5 },
-  { key: "participation", label: "Participation", unit: " %", digits: 0, max: 100 },
+const METRICS: { key: Metric; unit: string; digits: number; max?: number }[] = [
+  { key: "adoption_pct", unit: " %", digits: 0, max: 100 },
+  { key: "hours_saved_avg", unit: " h", digits: 1 },
+  { key: "skills_avg", unit: "", digits: 1, max: 3 },
+  { key: "satisfaction", unit: "", digits: 1, max: 5 },
+  { key: "participation", unit: " %", digits: 0, max: 100 },
 ];
 
 function shortLabel(e: EvolutionPoint) {
-  return new Date(`${e.date}T00:00:00`).toLocaleDateString("fr-FR", { month: "short", year: "2-digit" });
+  return new Date(`${e.date}T00:00:00`).toLocaleDateString(currentLocale(), { month: "short", year: "2-digit" });
 }
 
 export default function ScopeDashboard({ s, scopeLabel }: { s: ScopeStats; scopeLabel: string }) {
+  const { m: t } = useI18n();
+  const d = t.dash;
   const [metric, setMetric] = useState<Metric>("adoption_pct");
   const m = METRICS.find((x) => x.key === metric)!;
   const evo = s.evolution;
@@ -39,13 +42,13 @@ export default function ScopeDashboard({ s, scopeLabel }: { s: ScopeStats; scope
         <div className="card" style={{ marginBottom: "1rem", background: "var(--accent-soft)", borderColor: "transparent" }}>
           <div className="row" style={{ justifyContent: "space-between" }}>
             <div>
-              <strong>Campagne en cours : {current.title}</strong>
+              <strong>{d.currentCampaign(current.title)}</strong>
               <div className="small">
-                {current.respondents} / {current.targeted} réponses ({fmtNum(current.participation)} %)
+                {t.common.respondedOf(current.respondents, current.targeted)} ({fmtNum(current.participation)} %)
               </div>
             </div>
             <Link href={`/campagnes/${current.id}`} className="btn small">
-              Voir les résultats
+              {d.seeResults}
             </Link>
           </div>
         </div>
@@ -54,18 +57,18 @@ export default function ScopeDashboard({ s, scopeLabel }: { s: ScopeStats; scope
       {/* --- État actuel --- */}
       <div className="grid g4">
         <Kpi
-          label="Adoption"
+          label={d.adoption}
           value={s.adoption.active_pct}
           unit=" %"
-          foot={`${s.adoption.active} / ${s.members} utilisent un outil IA chaque semaine`}
+          foot={d.adoptionFoot(s.adoption.active, s.members)}
         />
         <Kpi
-          label="Temps gagné"
+          label={d.timeSaved}
           value={s.usecases.hours_saved_per_week}
-          unit=" h/sem."
+          unit={` h ${t.common.perWeek}`}
           foot={
             <>
-              via les use cases et leurs adoptants
+              {d.timeSavedFoot}
               {last && prev ? (
                 <>
                   {" "}· <Delta now={last.hours_saved_avg} before={prev.hours_saved_avg} unit=" h/pers." digits={1} />
@@ -75,13 +78,13 @@ export default function ScopeDashboard({ s, scopeLabel }: { s: ScopeStats; scope
           }
         />
         <Kpi
-          label="Niveau de compétences"
+          label={d.skillsLevel}
           value={s.skills.avg}
           unit=" / 3"
           digits={1}
           foot={
             <>
-              {fmtNum(s.skills.assessed_pct)} % auto-évalués
+              {d.assessedPct(fmtNum(s.skills.assessed_pct))}
               {last && prev ? (
                 <>
                   {" "}· <Delta now={last.skills_avg} before={prev.skills_avg} digits={1} />
@@ -91,16 +94,16 @@ export default function ScopeDashboard({ s, scopeLabel }: { s: ScopeStats; scope
           }
         />
         <Kpi
-          label="Satisfaction"
+          label={d.satisfaction}
           value={s.feeling?.satisfaction ?? null}
           unit=" / 5"
           digits={1}
           foot={
             s.feeling
               ? s.feeling.satisfaction === null
-                ? "Masqué : moins de 3 réponses"
-                : `${s.feeling.campaign} · ${s.feeling.respondents} réponses`
-              : "Pas encore de campagne avec ressenti"
+                ? t.common.hiddenSmall
+                : `${s.feeling.campaign} · ${t.common.answers(s.feeling.respondents)}`
+              : d.noCheckinYet
           }
         />
       </div>
@@ -108,37 +111,37 @@ export default function ScopeDashboard({ s, scopeLabel }: { s: ScopeStats; scope
       {/* --- Évolution --- */}
       <div className="card section">
         <div className="card-head" style={{ flexWrap: "wrap" }}>
-          <h2>Évolution par campagne</h2>
+          <h2>{d.evolution}</h2>
           <div className="pills">
             {METRICS.map((x) => (
               <button key={x.key} className={`ghost small ${metric === x.key ? "on" : ""}`} onClick={() => setMetric(x.key)}>
-                {x.label}
+                {d.metrics[x.key]}
               </button>
             ))}
           </div>
         </div>
         {evo.length === 0 ? (
           <div className="empty small">
-            Pas encore de campagne. <Link href="/campagnes/nouvelle">Lance une campagne de mise à jour</Link> : chaque campagne
-            ajoute un point à cette courbe.
+            {d.noCampaign} <Link href="/campagnes/nouvelle">{d.launchCampaign}</Link>
+            {d.noCampaignEnd}
           </div>
         ) : (
           <>
             <TrendChart
-              label={m.label}
+              label={d.metrics[m.key]}
               unit={m.unit}
               digits={m.digits}
               max={m.max}
               points={evo.map((e) => ({
                 key: String(e.id),
                 label: shortLabel(e),
-                title: `${e.title}${e.open ? " (en cours)" : ""}`,
+                title: `${e.title}${e.open ? d.inProgress : ""}`,
                 value: e[metric],
-                note: `${e.respondents} / ${e.targeted} réponses · ${fmtDay(e.date)}`,
+                note: `${t.common.respondedOf(e.respondents, e.targeted)} · ${fmtDay(e.date)}`,
               }))}
             />
             <p className="muted tiny" style={{ margin: "0.5rem 0 0" }}>
-              Chaque point est la photo des répondants d&apos;une campagne. Satisfaction masquée sous 3 réponses.
+              {d.evolutionNote}
             </p>
           </>
         )}
@@ -147,22 +150,22 @@ export default function ScopeDashboard({ s, scopeLabel }: { s: ScopeStats; scope
       <div className="grid g2 section">
         <div className="card">
           <div className="card-head">
-            <h2>Outils utilisés</h2>
-            <span className="muted small">{fmtNum(s.adoption.explorers_pct)} % ont déclaré au moins un outil</span>
+            <h2>{d.toolsUsed}</h2>
+            <span className="muted small">{d.explorers(fmtNum(s.adoption.explorers_pct))}</span>
           </div>
           <ToolBars rows={s.adoption.tools.slice(0, 10)} members={s.members} />
         </div>
         <div className="card">
           <div className="card-head">
-            <h2>Freins remontés</h2>
+            <h2>{d.blockers}</h2>
             <span className="muted small">{s.feeling ? s.feeling.campaign : ""}</span>
           </div>
           {!s.feeling ? (
-            <div className="empty small">Demande un ressenti dans une campagne pour voir les freins.</div>
+            <div className="empty small">{d.askCheckin}</div>
           ) : s.feeling.blockers === null ? (
-            <div className="empty small">Masqué : moins de 3 réponses.</div>
+            <div className="empty small">{t.common.hiddenSmallDot}</div>
           ) : (
-            <BarList rows={s.feeling.blockers.map((b) => ({ label: BLOCKERS[b.blocker] ?? b.blocker, value: b.count }))} format={(v) => `${v}`} />
+            <BarList rows={s.feeling.blockers.map((b) => ({ label: t.catalog.blockers[b.blocker] ?? b.blocker, value: b.count }))} format={(v) => `${v}`} />
           )}
         </div>
       </div>
@@ -171,38 +174,38 @@ export default function ScopeDashboard({ s, scopeLabel }: { s: ScopeStats; scope
       <div className="grid g2 section">
         <div className="card">
           <div className="card-head">
-            <h2>Compétences {scopeLabel}</h2>
-            <span className="muted small">{fmtNum(s.skills.assessed_pct)} % auto-évalués</span>
+            <h2>{d.skillsOf(scopeLabel)}</h2>
+            <span className="muted small">{d.assessedPct(fmtNum(s.skills.assessed_pct))}</span>
           </div>
           <SkillDistribution domains={s.skills.domains} />
         </div>
         <div className="card">
           <div className="card-head">
-            <h2>Quiz</h2>
+            <h2>{d.quiz}</h2>
           </div>
           <div className="grid g2">
             <div className="kpi">
-              <div className="label">Score moyen</div>
+              <div className="label">{d.quizAvg}</div>
               <div className="value">
                 {fmtNum(s.skills.quiz_avg_pct)}
                 {s.skills.quiz_avg_pct !== null ? <span className="unit"> %</span> : null}
               </div>
             </div>
             <div className="kpi">
-              <div className="label">Participants</div>
+              <div className="label">{d.participants}</div>
               <div className="value">
                 {s.skills.quiz_participants}
                 <span className="unit"> / {s.members}</span>
               </div>
             </div>
           </div>
-          <h3 style={{ marginTop: "1rem" }}>Domaines à renforcer</h3>
+          <h3 style={{ marginTop: "1rem" }}>{d.toStrengthen}</h3>
           <BarList
             rows={[...s.skills.domains]
               .filter((d) => d.avg !== null)
               .sort((a, b) => (a.avg ?? 0) - (b.avg ?? 0))
               .slice(0, 3)
-              .map((d) => ({ label: DOMAINS[d.domain]?.label ?? d.domain, value: d.avg ?? 0 }))}
+              .map((x) => ({ label: t.catalog.domains[x.domain]?.label ?? x.domain, value: x.avg ?? 0 }))}
             max={3}
             format={(v) => `${fmtNum(v, 1)} / 3`}
           />
@@ -213,32 +216,32 @@ export default function ScopeDashboard({ s, scopeLabel }: { s: ScopeStats; scope
       <div className="grid g2 section">
         <div className="card">
           <div className="card-head">
-            <h2>Use cases</h2>
+            <h2>{d.useCases}</h2>
             <Link href="/usages" className="small">
-              Catalogue →
+              {d.catalog}
             </Link>
           </div>
           <div className="grid g3" style={{ marginBottom: "1rem" }}>
             <div className="kpi">
-              <div className="label">Partagés</div>
+              <div className="label">{d.shared}</div>
               <div className="value">{s.usecases.count}</div>
-              <div className="foot">+{s.usecases.last_30_days} en 30 j</div>
+              <div className="foot">{d.inLast30(s.usecases.last_30_days)}</div>
             </div>
             <div className="kpi">
-              <div className="label">Contributeurs</div>
+              <div className="label">{d.contributors}</div>
               <div className="value">{s.usecases.contributors}</div>
-              <div className="foot">{s.usecases.validated} validés</div>
+              <div className="foot">{d.validated(s.usecases.validated)}</div>
             </div>
             <div className="kpi">
-              <div className="label">Temps gagné</div>
+              <div className="label">{d.timeSaved}</div>
               <div className="value">
                 {fmtNum(s.usecases.hours_saved_per_week)}
-                <span className="unit"> h/sem.</span>
+                <span className="unit"> h {t.common.perWeek}</span>
               </div>
-              <div className="foot">auteurs + adoptants</div>
+              <div className="foot">{d.authorsAdopters}</div>
             </div>
           </div>
-          <h3>Les plus adoptés</h3>
+          <h3>{d.mostAdopted}</h3>
           {s.usecases.top.length ? (
             <table>
               <tbody>
@@ -247,10 +250,10 @@ export default function ScopeDashboard({ s, scopeLabel }: { s: ScopeStats; scope
                     <td>
                       <Link href={`/usages/${u.id}`}>{u.title}</Link>
                       <div className="muted tiny">
-                        {CATEGORIES[u.category]} · {u.author}
+                        {t.catalog.categories[u.category]} · {u.author}
                       </div>
                     </td>
-                    <td className="num" title="Personnes qui l'utilisent aussi">
+                    <td className="num" title={t.usecases.adoptersTitle}>
                       👥 {u.adopters}
                     </td>
                   </tr>
@@ -258,36 +261,36 @@ export default function ScopeDashboard({ s, scopeLabel }: { s: ScopeStats; scope
               </tbody>
             </table>
           ) : (
-            <div className="empty small">Aucun use case partagé pour l&apos;instant.</div>
+            <div className="empty small">{d.noUseCase}</div>
           )}
         </div>
         <div className="card">
           <div className="card-head">
-            <h2>Feedback</h2>
+            <h2>{d.feedback}</h2>
             <Link href="/feedback" className="small">
-              Boîte de réception →
+              {d.inbox}
             </Link>
           </div>
           <div className="grid g3" style={{ marginBottom: "1rem" }}>
             {(["new", "in_progress", "done"] as const).map((k) => (
               <div className="kpi" key={k}>
-                <div className="label">{FEEDBACK_STATUSES[k]}</div>
+                <div className="label">{t.catalog.feedbackStatuses[k]}</div>
                 <div className="value">{s.feedback.by_status[k] ?? 0}</div>
               </div>
             ))}
           </div>
           {openFeedback ? (
             <p className="small">
-              <strong>{openFeedback}</strong> feedback{openFeedback > 1 ? "s" : ""} en attente de réponse.
+              {d.awaiting(openFeedback)}
             </p>
           ) : null}
-          <h3>Verbatims {s.feeling ? `— ${s.feeling.campaign}` : ""}</h3>
+          <h3>{d.verbatims} {s.feeling ? `— ${s.feeling.campaign}` : ""}</h3>
           {!s.feeling ? (
-            <div className="empty small">Pas encore de ressenti collecté.</div>
+            <div className="empty small">{d.noCheckin}</div>
           ) : s.feeling.comments === null ? (
-            <div className="empty small">Masqué : moins de 3 réponses.</div>
+            <div className="empty small">{t.common.hiddenSmallDot}</div>
           ) : s.feeling.comments.length === 0 ? (
-            <div className="empty small">Aucun commentaire.</div>
+            <div className="empty small">{d.noComment}</div>
           ) : (
             <ul style={{ paddingLeft: "1.1rem", margin: 0 }}>
               {s.feeling.comments.slice(0, 6).map((c, i) => (
@@ -307,6 +310,9 @@ const DIST_COLORS = ["var(--seq-100)", "var(--seq-300)", "var(--seq-500)", "var(
 
 /** Répartition des niveaux par domaine : barres 100 % empilées (rampe ordinale). */
 function SkillDistribution({ domains }: { domains: ScopeStats["skills"]["domains"] }) {
+  const { m: t } = useI18n();
+  const DOMAINS = t.catalog.domains;
+  const SKILL_LEVELS = t.catalog.skillLevels;
   return (
     <>
       <div className="bars">
@@ -340,7 +346,7 @@ function SkillDistribution({ domains }: { domains: ScopeStats["skills"]["domains
             {l}
           </span>
         ))}
-        <span className="muted">· valeur = niveau moyen / 3</span>
+        <span className="muted">{t.dash.levelLegend}</span>
       </div>
     </>
   );

@@ -4,10 +4,13 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { DOMAINS, DOMAIN_KEYS, SKILL_HINTS, SKILL_LEVELS } from "@/lib/catalog";
+import { DOMAIN_KEYS } from "@/lib/catalog";
+import { useI18n } from "@/lib/i18n";
 
 export default function SkillsEditor({ onSaved }: { onSaved?: () => void }) {
+  const { m } = useI18n();
   const [levels, setLevels] = useState<Record<string, number>>({});
+  const { domains, skillLevels, skillHints } = m.catalog;
 
   useEffect(() => {
     api<Record<string, number>>("/skills").then(setLevels);
@@ -22,19 +25,19 @@ export default function SkillsEditor({ onSaved }: { onSaved?: () => void }) {
   return (
     <div>
       <div className="legend" style={{ marginTop: 0, marginBottom: "0.75rem" }}>
-        {SKILL_LEVELS.map((l, i) => (
+        {skillLevels.map((l, i) => (
           <span key={l}>
-            <strong>{l}</strong> : {SKILL_HINTS[i]}
+            <strong>{l}</strong> : {skillHints[i]}
           </span>
         ))}
       </div>
       {DOMAIN_KEYS.map((d) => (
         <div key={d} style={{ padding: "0.6rem 0", borderTop: "1px solid var(--grid)" }}>
           <div style={{ marginBottom: "0.4rem" }}>
-            <strong>{DOMAINS[d].label}</strong> <span className="muted small">— {DOMAINS[d].hint}</span>
+            <strong>{domains[d].label}</strong> <span className="muted small">— {domains[d].hint}</span>
           </div>
           <div className="scale s4">
-            {SKILL_LEVELS.map((l, i) => (
+            {skillLevels.map((l, i) => (
               <button key={l} type="button" className={levels[d] === i ? "on" : ""} onClick={() => setLevel(d, i)}>
                 {l}
               </button>

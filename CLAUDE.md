@@ -20,5 +20,9 @@ définitions des indicateurs) : le garder synchronisé avec le code. Langue du p
   (photo de l'état de chaque répondant à l'envoi, `campaign_participants`).
 - Anonymat : ressenti (satisfaction, freins, verbatims) masqué sous `min_group_size`. Un feedback
   anonyme a `author_id` NULL. Jamais de ressenti individuel dans une vue lead ou manager.
+- **Multilingue (fr, en)** : aucun texte en dur dans le front, tout passe par `useI18n().m`
+  (`web/messages/fr.ts` = référence, `en.ts` doit avoir la même forme, TypeScript le vérifie).
+  Erreurs API écrites en français et traduites via `app/i18n.py` (ajouter toute nouvelle
+  phrase d'erreur au dictionnaire). Quiz de la bibliothèque : `app/quiz_i18n.py`.
 - Graphiques : méthode dataviz (une teinte pour les grandeurs, rampe bleue ordinale/séquentielle,
   infobulle au survol, pas de double axe), tokens dans `web/app/globals.css`.

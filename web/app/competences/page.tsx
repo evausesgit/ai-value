@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import SkillsEditor from "@/components/SkillsEditor";
-import { DOMAINS } from "@/lib/catalog";
+import { useI18n } from "@/lib/i18n";
 import { hasRole, useSession } from "@/lib/session";
 
 interface QuizItem {
@@ -20,6 +20,7 @@ interface QuizItem {
 
 export default function SkillsPage() {
   const { me } = useSession();
+  const { m } = useI18n();
   const [quizzes, setQuizzes] = useState<QuizItem[]>([]);
   const [saved, setSaved] = useState(false);
 
@@ -28,7 +29,7 @@ export default function SkillsPage() {
   }, []);
 
   async function removeQuiz(id: number) {
-    if (!confirm("Retirer ce quiz ?")) return;
+    if (!confirm(m.skills.confirmRemove)) return;
     await api(`/quizzes/${id}`, { method: "DELETE" });
     setQuizzes((qs) => qs.filter((q) => q.id !== id));
   }
@@ -37,25 +38,25 @@ export default function SkillsPage() {
     <main className="page">
       <div className="page-head">
         <div>
-          <h1>Compétences IA</h1>
-          <p className="sub">Où en es-tu ? L&apos;auto-évaluation aide ton équipe à cibler les formations.</p>
+          <h1>{m.skills.title}</h1>
+          <p className="sub">{m.skills.subtitle}</p>
         </div>
       </div>
 
       <div className="card">
         <div className="card-head">
-          <h2>Mon auto-évaluation</h2>
-          {saved ? <span className="pill good">✓ Enregistré</span> : null}
+          <h2>{m.skills.myAssessment}</h2>
+          {saved ? <span className="pill good">{m.skills.savedPill}</span> : null}
         </div>
         <SkillsEditor onSaved={() => setSaved(true)} />
       </div>
 
       <div className="section" id="quiz">
         <div className="page-head" style={{ marginBottom: "0.85rem" }}>
-          <h2 style={{ margin: 0 }}>Quiz</h2>
+          <h2 style={{ margin: 0 }}>{m.skills.quiz}</h2>
           {hasRole(me, "lead") ? (
             <Link href="/quiz/nouveau" className="btn ghost small">
-              + Créer un quiz
+              {m.skills.createQuiz}
             </Link>
           ) : null}
         </div>
@@ -63,11 +64,11 @@ export default function SkillsPage() {
           {quizzes.map((q) => (
             <div key={q.id} className="card uc-card">
               <div className="pills">
-                <span className="pill blue">{DOMAINS[q.domain]?.label ?? q.domain}</span>
-                {!q.library ? <span className="pill">Maison</span> : null}
+                <span className="pill blue">{m.catalog.domains[q.domain]?.label ?? q.domain}</span>
+                {!q.library ? <span className="pill">{m.skills.homemade}</span> : null}
                 {q.best_pct !== null ? (
                   <span className={`pill ${q.best_pct >= 80 ? "good" : q.best_pct >= 50 ? "warn" : "crit"}`}>
-                    Meilleur score {Math.round(q.best_pct)} %
+                    {m.skills.best(Math.round(q.best_pct))}
                   </span>
                 ) : null}
               </div>
@@ -77,11 +78,11 @@ export default function SkillsPage() {
               </p>
               <div className="row" style={{ marginTop: "auto" }}>
                 <Link href={`/quiz/${q.id}`} className="btn small">
-                  {q.best_pct === null ? "Commencer" : "Refaire"} · {q.questions} questions
+                  {q.best_pct === null ? m.skills.start : m.skills.redo} · {m.skills.questions(q.questions)}
                 </Link>
                 {q.can_delete ? (
                   <button className="danger small" onClick={() => removeQuiz(q.id)}>
-                    Retirer
+                    {m.skills.remove}
                   </button>
                 ) : null}
               </div>

@@ -5,10 +5,11 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import RiskPill from "@/components/RiskPill";
 import { api, type Team, type UseCase } from "@/lib/api";
-import { CATEGORIES } from "@/lib/catalog";
+import { useI18n } from "@/lib/i18n";
 
 function UseCases() {
   const params = useSearchParams();
+  const { m } = useI18n();
   const [items, setItems] = useState<UseCase[] | null>(null);
   const [teams, setTeams] = useState<Team[]>([]);
   const [q, setQ] = useState("");
@@ -39,26 +40,26 @@ function UseCases() {
     <main className="page">
       <div className="page-head">
         <div>
-          <h1>Use cases</h1>
-          <p className="sub">Ce que les équipes font concrètement avec l&apos;IA. Inspire-toi, adopte, partage.</p>
+          <h1>{m.usecases.title}</h1>
+          <p className="sub">{m.usecases.subtitle}</p>
         </div>
         <Link href="/usages/nouveau" className="btn">
-          + Partager un use case
+          {m.usecases.share}
         </Link>
       </div>
 
       <div className="row" style={{ marginBottom: "1.25rem" }}>
-        <input className="grow" placeholder="Rechercher…" value={q} onChange={(e) => setQ(e.target.value)} style={{ flex: "2 1 220px" }} />
+        <input className="grow" placeholder={m.common.search} value={q} onChange={(e) => setQ(e.target.value)} style={{ flex: "2 1 220px" }} />
         <select value={category} onChange={(e) => setCategory(e.target.value)} style={{ flex: "1 1 160px", width: "auto" }}>
-          <option value="">Toutes catégories</option>
-          {Object.entries(CATEGORIES).map(([k, l]) => (
+          <option value="">{m.usecases.allCategories}</option>
+          {Object.entries(m.catalog.categories).map(([k, l]) => (
             <option key={k} value={k}>
               {l}
             </option>
           ))}
         </select>
         <select value={teamId} onChange={(e) => setTeamId(e.target.value)} style={{ flex: "1 1 140px", width: "auto" }}>
-          <option value="">Toutes équipes</option>
+          <option value="">{m.usecases.allTeams}</option>
           {teams.map((t) => (
             <option key={t.id} value={t.id}>
               {t.name}
@@ -66,36 +67,36 @@ function UseCases() {
           ))}
         </select>
         <select value={sort} onChange={(e) => setSort(e.target.value)} style={{ flex: "1 1 160px", width: "auto" }}>
-          <option value="recent">Plus récents</option>
-          <option value="popular">Plus adoptés</option>
-          <option value="saved">Plus de temps gagné</option>
+          <option value="recent">{m.usecases.sortRecent}</option>
+          <option value="popular">{m.usecases.sortPopular}</option>
+          <option value="saved">{m.usecases.sortSaved}</option>
         </select>
         <label className="check">
-          <input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} /> Les miens
+          <input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} /> {m.usecases.mine}
         </label>
       </div>
       {tool ? (
         <p>
-          <span className="pill blue">Outil : {tool}</span>{" "}
+          <span className="pill blue">{m.usecases.toolFilter(tool)}</span>{" "}
           <Link href="/usages" className="small">
-            retirer le filtre
+            {m.usecases.removeFilter}
           </Link>
         </p>
       ) : null}
 
       {items === null ? (
-        <p className="muted">Chargement…</p>
+        <p className="muted">{m.common.loading}</p>
       ) : items.length === 0 ? (
         <div className="card empty">
-          Aucun use case pour ces filtres. <Link href="/usages/nouveau">Sois le premier à en partager un !</Link>
+          {m.usecases.empty} <Link href="/usages/nouveau">{m.usecases.beFirst}</Link>
         </div>
       ) : (
         <div className="grid g3">
           {items.map((uc) => (
             <Link key={uc.id} href={`/usages/${uc.id}`} className="card uc-card">
               <div className="pills">
-                <span className="pill blue">{CATEGORIES[uc.category] ?? uc.category}</span>
-                {uc.status === "validated" ? <span className="pill good">✓ Validé</span> : null}
+                <span className="pill blue">{m.catalog.categories[uc.category] ?? uc.category}</span>
+                {uc.status === "validated" ? <span className="pill good">{m.usecases.validated}</span> : null}
                 {uc.risk !== "low" ? <RiskPill risk={uc.risk} /> : null}
               </div>
               <h3>{uc.title}</h3>
@@ -106,9 +107,9 @@ function UseCases() {
               ) : null}
               <div className="uc-meta">
                 <span>{uc.team ?? ""}</span>
-                <span>⏱ {uc.minutes_saved_per_week} min/sem.</span>
-                <span title="Personnes qui l'utilisent aussi">👥 {uc.adopters}</span>
-                <span title="Utile">♥ {uc.likes}</span>
+                <span>{m.usecases.minPerWeek(uc.minutes_saved_per_week)}</span>
+                <span title={m.usecases.adoptersTitle}>👥 {uc.adopters}</span>
+                <span title={m.usecases.likesTitle}>♥ {uc.likes}</span>
               </div>
             </Link>
           ))}

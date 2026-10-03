@@ -5,18 +5,10 @@
 
 import { useEffect, useState } from "react";
 import { api, type Tool } from "@/lib/api";
-import { FREQUENCIES } from "@/lib/catalog";
-
-const CATEGORY_LABELS: Record<string, string> = {
-  assistant: "Assistants",
-  code: "Code",
-  recherche: "Recherche",
-  image: "Images",
-  productivite: "Productivité",
-  interne: "Outils internes",
-};
+import { useI18n } from "@/lib/i18n";
 
 export default function ToolsEditor({ compact = false }: { compact?: boolean }) {
+  const { m } = useI18n();
   const [tools, setTools] = useState<Tool[]>([]);
   const [usages, setUsages] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
@@ -52,7 +44,7 @@ export default function ToolsEditor({ compact = false }: { compact?: boolean }) 
       {Object.entries(groups).map(([cat, list]) => (
         <div key={cat} style={{ marginBottom: compact ? "0.5rem" : "1rem" }}>
           <h3 className="muted small" style={{ textTransform: "uppercase", letterSpacing: "0.04em", margin: "0.5rem 0 0.25rem" }}>
-            {CATEGORY_LABELS[cat] ?? cat}
+            {m.catalog.toolCategories[cat] ?? cat}
           </h3>
           {list.map((t) => {
             const cur = usages[String(t.id)] ?? null;
@@ -61,9 +53,9 @@ export default function ToolsEditor({ compact = false }: { compact?: boolean }) 
                 <div style={{ fontWeight: 600, minWidth: 140 }}>{t.name}</div>
                 <div className="pills">
                   <button className={`ghost small ${cur === null ? "on" : ""}`} onClick={() => setFreq(t.id, null)}>
-                    Jamais
+                    {m.common.never}
                   </button>
-                  {Object.entries(FREQUENCIES)
+                  {Object.entries(m.catalog.frequencies)
                     .reverse()
                     .map(([k, l]) => (
                       <button key={k} className={`ghost small ${cur === k ? "on" : ""}`} onClick={() => setFreq(t.id, k)}>

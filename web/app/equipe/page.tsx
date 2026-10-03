@@ -4,7 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import ScopeDashboard from "@/components/ScopeDashboard";
 import { api, type ScopeStats } from "@/lib/api";
-import { ROLES } from "@/lib/catalog";
+import { useI18n } from "@/lib/i18n";
 import { useSession } from "@/lib/session";
 
 interface TeamStats extends ScopeStats {
@@ -33,6 +33,8 @@ export default function TeamPage() {
 
 function Team() {
   const { me } = useSession();
+  const { m } = useI18n();
+  const d = m.dash;
   const params = useSearchParams();
   const [teamId, setTeamId] = useState<number | null>(Number(params.get("team")) || null);
   const [data, setData] = useState<TeamStats | null>(null);
@@ -52,21 +54,21 @@ function Team() {
   if (error && !data)
     return (
       <main className="page">
-        <h1>Mon équipe</h1>
+        <h1>{d.myTeam}</h1>
         <div className="card empty">
-          {me && !me.team ? "Tu n'es rattaché·e à aucune équipe. Choisis-en une depuis l'Organisation ou demande à ton admin." : error}
+          {me && !me.team ? d.noTeam : error}
         </div>
       </main>
     );
-  if (!data) return <main className="page muted">Chargement…</main>;
+  if (!data) return <main className="page muted">{m.common.loading}</main>;
 
   return (
     <main className="page">
       <div className="page-head">
         <div>
-          <h1>Équipe {data.team.name}</h1>
+          <h1>{d.teamTitle(data.team.name)}</h1>
           <p className="sub">
-            {data.members} membre{data.members > 1 ? "s" : ""} · adoption, connaissances et retours de l&apos;équipe
+            {d.teamSubtitle(data.members)}
           </p>
         </div>
         {data.teams.length > 1 ? (
@@ -80,31 +82,31 @@ function Team() {
         ) : null}
       </div>
 
-      <ScopeDashboard s={data} scopeLabel="de l'équipe" />
+      <ScopeDashboard s={data} scopeLabel={d.ofTeam} />
 
       <div className="card section">
         <div className="card-head">
-          <h2>Membres</h2>
-          <span className="muted small">Activité uniquement — le ressenti reste anonyme</span>
+          <h2>{d.roster}</h2>
+          <span className="muted small">{d.rosterHint}</span>
         </div>
         <div className="table-wrap">
           <table>
             <thead>
               <tr>
-                <th>Nom</th>
-                <th>Métier</th>
-                <th className="num">Campagnes répondues</th>
-                <th>Auto-évalué</th>
-                <th className="num">Outils actifs</th>
-                <th className="num">Use cases</th>
-                <th className="num">Quiz</th>
+                <th>{d.colName}</th>
+                <th>{d.colJob}</th>
+                <th className="num">{d.colAnswered}</th>
+                <th>{d.colAssessed}</th>
+                <th className="num">{d.colActiveTools}</th>
+                <th className="num">{d.colUseCases}</th>
+                <th className="num">{d.colQuiz}</th>
               </tr>
             </thead>
             <tbody>
               {data.roster.map((r) => (
                 <tr key={r.id}>
                   <td>
-                    {r.name} {r.role !== "member" ? <span className="pill">{ROLES[r.role]}</span> : null}
+                    {r.name} {r.role !== "member" ? <span className="pill">{m.catalog.roles[r.role]}</span> : null}
                   </td>
                   <td className="muted">{r.job}</td>
                   <td className="num">{r.campaigns}</td>

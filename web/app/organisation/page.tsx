@@ -5,7 +5,8 @@ import { useEffect, useState } from "react";
 import { Heatmap, Sparkline } from "@/components/charts";
 import ScopeDashboard from "@/components/ScopeDashboard";
 import { api, type ScopeStats } from "@/lib/api";
-import { DOMAINS, fmtNum } from "@/lib/catalog";
+import { fmtNum } from "@/lib/catalog";
+import { useI18n } from "@/lib/i18n";
 
 interface OrgStats extends ScopeStats {
   org: { id: number; name: string };
@@ -28,6 +29,8 @@ interface OrgStats extends ScopeStats {
 type SortKey = "name" | "members" | "adoption_pct" | "skills_avg" | "hours_saved" | "usecases" | "quiz_avg_pct" | "participation" | "satisfaction";
 
 export default function OrgPage() {
+  const { m } = useI18n();
+  const d = m.dash;
   const [data, setData] = useState<OrgStats | null>(null);
   const [error, setError] = useState("");
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: "adoption_pct", desc: true });
@@ -37,7 +40,7 @@ export default function OrgPage() {
   }, []);
 
   if (error) return <main className="page"><div className="error">{error}</div></main>;
-  if (!data) return <main className="page muted">Chargement…</main>;
+  if (!data) return <main className="page muted">{m.common.loading}</main>;
 
   const teams = [...data.teams].sort((a, b) => {
     const va = a[sort.key];
@@ -61,32 +64,32 @@ export default function OrgPage() {
         <div>
           <h1>{data.org.name}</h1>
           <p className="sub">
-            Vue d&apos;ensemble · {data.members} personnes · {data.teams.length} équipes
+            {d.orgOverview(data.members, data.teams.length)}
           </p>
         </div>
       </div>
 
-      <ScopeDashboard s={data} scopeLabel="de l'organisation" />
+      <ScopeDashboard s={data} scopeLabel={d.ofOrg} />
 
       <div className="card section">
         <div className="card-head">
-          <h2>Comparaison des équipes</h2>
-          <span className="muted small">Cliquer sur une colonne pour trier</span>
+          <h2>{d.compare}</h2>
+          <span className="muted small">{d.sortHint}</span>
         </div>
         <div className="table-wrap">
           <table>
             <thead>
               <tr>
-                {th("name", "Équipe", false)}
-                {th("members", "Membres")}
-                {th("adoption_pct", "Adoption")}
-                <th>Campagnes</th>
-                {th("hours_saved", "Temps gagné")}
-                {th("skills_avg", "Compétences")}
-                {th("usecases", "Use cases")}
-                {th("quiz_avg_pct", "Quiz")}
-                {th("participation", "Participation")}
-                {th("satisfaction", "Satisf.")}
+                {th("name", d.colTeam, false)}
+                {th("members", d.colMembers)}
+                {th("adoption_pct", d.colAdoption)}
+                <th>{d.colCampaigns}</th>
+                {th("hours_saved", d.colTime)}
+                {th("skills_avg", d.colSkills)}
+                {th("usecases", d.colUseCases)}
+                {th("quiz_avg_pct", d.colQuiz)}
+                {th("participation", d.colParticipation)}
+                {th("satisfaction", d.colSatisfaction)}
               </tr>
             </thead>
             <tbody>
@@ -99,15 +102,15 @@ export default function OrgPage() {
                   </td>
                   <td className="num">{t.members}</td>
                   <td className="num">{fmtNum(t.adoption_pct, 0, " %")}</td>
-                  <td title="Adoption à chaque campagne">
+                  <td title={d.adoptionPerCampaign}>
                     <Sparkline values={t.adoption_trend} />
                   </td>
-                  <td className="num">{fmtNum(t.hours_saved, 0, " h/sem.")}</td>
+                  <td className="num">{fmtNum(t.hours_saved, 0, ` h ${m.common.perWeek}`)}</td>
                   <td className="num">{fmtNum(t.skills_avg, 1)}</td>
                   <td className="num">{t.usecases}</td>
                   <td className="num">{fmtNum(t.quiz_avg_pct, 0, " %")}</td>
                   <td className="num">{fmtNum(t.participation, 0, " %")}</td>
-                  <td className="num" title={t.satisfaction === null ? "Masqué : moins de 3 réponses" : ""}>
+                  <td className="num" title={t.satisfaction === null ? m.common.hiddenSmall : ""}>
                     {fmtNum(t.satisfaction, 1)}
                   </td>
                 </tr>
@@ -116,17 +119,17 @@ export default function OrgPage() {
           </table>
         </div>
         <p className="muted tiny" style={{ margin: "0.6rem 0 0" }}>
-          Adoption = membres déclarant un outil IA utilisé chaque jour ou chaque semaine (état actuel). Participation et satisfaction : dernière campagne close.
+          {d.compareNote}
         </p>
       </div>
 
       <div className="card section">
         <div className="card-head">
-          <h2>Carte des compétences</h2>
-          <span className="muted small">Niveau moyen auto-évalué, par équipe et par domaine</span>
+          <h2>{d.skillsMap}</h2>
+          <span className="muted small">{d.skillsMapHint}</span>
         </div>
         <Heatmap
-          columns={data.skills_heatmap.domains.map((d) => ({ key: d, label: DOMAINS[d]?.label ?? d }))}
+          columns={data.skills_heatmap.domains.map((k) => ({ key: k, label: m.catalog.domains[k]?.label ?? k }))}
           rows={data.skills_heatmap.rows.map((r) => ({ label: r.team, values: r.values }))}
         />
       </div>

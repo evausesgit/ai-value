@@ -11,6 +11,7 @@ from app.catalog import DOMAINS
 from app.db import get_session
 from app.deps import current_user, has_role, require_role
 from app.models import Quiz, QuizAttempt, QuizQuestion, SkillAssessment, User
+from app.quiz_i18n import localize_quiz
 
 router = APIRouter(tags=["skills"])
 
@@ -68,20 +69,23 @@ def list_quizzes(user: User = Depends(current_user), session: Session = Depends(
             select(QuizQuestion.quiz_id, func.count()).group_by(QuizQuestion.quiz_id)
         ).all()
     )
-    return [
-        {
-            "id": q.id,
-            "title": q.title,
-            "description": q.description,
-            "domain": q.domain,
-            "library": q.org_id is None,
-            "questions": counts.get(q.id, 0),
-            "best_pct": best.get(q.id),
-            "can_delete": q.org_id is not None
-            and (has_role(user, "admin") or q.created_by == user.id),
-        }
-        for q in quizzes
-    ]
+    out = []
+    for q in quizzes:
+        tr = localize_quiz(q.slug, user.lang) or {}
+        out.append(
+            {
+                "id": q.id,
+                "title": tr.get("title", q.title),
+                "description": tr.get("description", q.description),
+                "domain": q.domain,
+                "library": q.org_id is None,
+                "questions": counts.get(q.id, 0),
+                "best_pct": best.get(q.id),
+                "can_delete": q.org_id is not None
+                and (has_role(user, "admin") or q.created_by == user.id),
+            }
+        )
+    return out
 
 
 @router.get("/quizzes/{quiz_id}")
@@ -89,13 +93,29 @@ def get_quiz(
     quiz_id: int, user: User = Depends(current_user), session: Session = Depends(get_session)
 ):
     quiz = _visible_quiz(session, user, quiz_id)
+    texts = _texts(quiz, user.lang)
     return {
         "id": quiz.id,
-        "title": quiz.title,
-        "description": quiz.description,
+        "title": texts["title"],
+        "description": texts["description"],
         "domain": quiz.domain,
         # Pas de bonne réponse ici : elle n'est révélée qu'après la tentative.
-        "questions": [{"prompt": q.prompt, "options": q.options} for q in quiz.questions],
+        "questions": [{"prompt": t["prompt"], "options": t["options"]} for t in texts["questions"]],
+    }
+
+
+def _texts(quiz: Quiz, lang: str) -> dict:
+    """Textes du quiz dans la langue demandée (bibliothèque traduite, sinon d'origine)."""
+    tr = localize_quiz(quiz.slug, lang)
+    if tr and len(tr["questions"]) == len(quiz.questions):
+        return tr
+    return {
+        "title": quiz.title,
+        "description": quiz.description,
+        "questions": [
+            {"prompt": q.prompt, "options": q.options, "explanation": q.explanation}
+            for q in quiz.questions
+        ],
     }
 
 
@@ -128,7 +148,8 @@ def attempt_quiz(
         "score": score,
         "total": len(quiz.questions),
         "corrections": [
-            {"correct": q.correct, "explanation": q.explanation} for q in quiz.questions
+            {"correct": q.correct, "explanation": t["explanation"]}
+            for q, t in zip(quiz.questions, _texts(quiz, user.lang)["questions"], strict=True)
         ],
     }
 

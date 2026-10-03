@@ -4,11 +4,14 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Meter } from "@/components/charts";
 import { api, type Campaign, type Team } from "@/lib/api";
-import { CAMPAIGN_ITEMS, fmtDay } from "@/lib/catalog";
+import { fmtDay } from "@/lib/catalog";
+import { useI18n } from "@/lib/i18n";
 import { hasRole, useSession } from "@/lib/session";
 
 export default function CampaignsPage() {
   const { me } = useSession();
+  const { m } = useI18n();
+  const c_ = m.campaigns;
   const [items, setItems] = useState<Campaign[] | null>(null);
   const [teams, setTeams] = useState<Team[]>([]);
 
@@ -17,29 +20,29 @@ export default function CampaignsPage() {
     api<Team[]>("/teams").then(setTeams);
   }, []);
 
-  if (me && !hasRole(me, "lead")) return <main className="page"><div className="error">Accès réservé.</div></main>;
+  if (me && !hasRole(me, "lead")) return <main className="page"><div className="error">{m.common.restricted}</div></main>;
   const scope = (c: Campaign) =>
-    c.team_ids.length === 0 ? "Toute l'organisation" : c.team_ids.map((id) => teams.find((t) => t.id === id)?.name ?? "?").join(", ");
+    c.team_ids.length === 0 ? c_.wholeOrg : c.team_ids.map((id) => teams.find((t) => t.id === id)?.name ?? "?").join(", ");
 
   return (
     <main className="page">
       <div className="page-head">
         <div>
-          <h1>Campagnes de mise à jour</h1>
+          <h1>{c_.title}</h1>
           <p className="sub">
-            Demande aux équipes de mettre à jour leurs outils, compétences et use cases. Chaque campagne devient un point de suivi.
+            {c_.subtitle}
           </p>
         </div>
         <Link href="/campagnes/nouvelle" className="btn">
-          + Nouvelle campagne
+          {c_.new}
         </Link>
       </div>
       {items === null ? (
-        <p className="muted">Chargement…</p>
+        <p className="muted">{m.common.loading}</p>
       ) : items.length === 0 ? (
         <div className="card empty">
-          Aucune campagne pour l&apos;instant. <Link href="/campagnes/nouvelle">Lance la première</Link> : les équipes
-          recevront la demande sur leur espace.
+          {c_.empty} <Link href="/campagnes/nouvelle">{c_.launchFirst}</Link>
+          {c_.emptyEnd}
         </div>
       ) : (
         <div className="grid g2">
@@ -48,17 +51,17 @@ export default function CampaignsPage() {
             return (
               <Link key={c.id} href={`/campagnes/${c.id}`} className="card uc-card">
                 <div className="pills">
-                  {c.open ? <span className="pill blue">● En cours</span> : <span className="pill">■ Close</span>}
+                  {c.open ? <span className="pill blue">{c_.open}</span> : <span className="pill">{c_.closed}</span>}
                   <span className="pill">{scope(c)}</span>
                 </div>
                 <h3>{c.title}</h3>
                 <div className="small muted">
-                  {c.opens_at ? fmtDay(c.opens_at) : ""} → {fmtDay(c.closes_on)} · {c.items.map((i) => CAMPAIGN_ITEMS[i].label).join(", ")}
+                  {c.opens_at ? fmtDay(c.opens_at) : ""} → {fmtDay(c.closes_on)} · {c.items.map((i) => m.catalog.campaignItems[i].label).join(", ")}
                 </div>
                 <div style={{ marginTop: "auto" }}>
                   <div className="row small" style={{ justifyContent: "space-between", marginBottom: "0.3rem" }}>
                     <span>
-                      {c.respondents} / {c.targeted} réponses
+                      {m.common.respondedOf(c.respondents ?? 0, c.targeted ?? 0)}
                     </span>
                     <strong>{pct} %</strong>
                   </div>

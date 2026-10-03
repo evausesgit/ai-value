@@ -269,3 +269,8 @@ pre.prompt { background: var(--surface-2); border-radius: 10px; padding: 0.8rem 
 .auth-card { width: 100%; max-width: 400px; }
 .copy-box { display: flex; gap: 0.5rem; }
 .copy-box input { font-family: ui-monospace, monospace; font-size: 0.8rem; }
+
+/* --- Sélecteur de langue --- */
+.lang-switch { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.lang-switch button { background: transparent; color: var(--text-2); border: none; border-radius: 0; padding: 0.25rem 0.5rem; font-size: 0.75rem; font-weight: 600; }
+.lang-switch button.on { background: var(--accent-soft); color: var(--accent); }

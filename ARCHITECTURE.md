@@ -60,6 +60,20 @@ cases et son feedback quand il veut.
   (`MIN_GROUP_SIZE`). Les vues lead ou manager ne montrent que l'activité individuelle (campagnes
   répondues, auto-évaluation faite, outils, use cases, quiz), jamais le ressenti.
 
+## Langues (fr, en)
+
+- **Front** : `web/lib/i18n.tsx` (sans dépendance). Dictionnaires typés `web/messages/fr.ts`
+  (référence) et `en.ts` (même forme, imposée par le type `Messages`). Langue = `users.lang` si
+  connecté, sinon choix mémorisé dans le navigateur, sinon langue du navigateur. Sélecteur FR/EN
+  dans la barre de navigation et dans le profil. Dates et nombres formatés selon la langue.
+- **API** : messages d'erreur écrits en français, traduits par le gestionnaire d'exceptions
+  (`app/i18n.py`) selon `Accept-Language`, envoyé par le front.
+- **Contenus** : les quiz de la bibliothèque sont traduits (`app/quiz_i18n.py`). Ce que saisissent
+  les utilisateurs (use cases, feedback, campagnes, quiz maison) reste dans sa langue d'origine.
+- **Ajouter une langue** : `web/messages/xx.ts` + `DICTS` dans `web/lib/i18n.tsx`, `MESSAGES`
+  et `PATTERNS` dans `app/i18n.py`, `QUIZ_TRANSLATIONS` dans `app/quiz_i18n.py`, et le
+  `Literal` de `Lang` dans `app/api/auth.py`.
+
 ## Suite prévue
 
 - Métriques de delivery (lead time, cycle time) via GitHub/GitLab et Jira/Linear, corrélées à l'adoption.

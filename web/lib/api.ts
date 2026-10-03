@@ -1,4 +1,6 @@
 // Appels relatifs : ils passent par le relais Next (/api → FastAPI).
+import { currentLang } from "./i18n";
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -14,7 +16,11 @@ export async function api<T = unknown>(
 ): Promise<T> {
   const res = await fetch(`/api${path}`, {
     method: init.method ?? (init.body !== undefined ? "POST" : "GET"),
-    headers: init.body !== undefined ? { "content-type": "application/json" } : undefined,
+    // La langue sert à traduire les messages d'erreur côté API.
+    headers: {
+      "accept-language": currentLang(),
+      ...(init.body !== undefined ? { "content-type": "application/json" } : {}),
+    },
     body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
     credentials: "same-origin",
     cache: "no-store",
@@ -22,14 +28,14 @@ export async function api<T = unknown>(
   if (res.status === 401 && !path.startsWith("/auth/")) {
     const next = window.location.pathname + window.location.search;
     window.location.href = `/login?next=${encodeURIComponent(next)}`;
-    throw new ApiError(401, "Connexion requise.");
+    throw new ApiError(401, "401");
   }
   if (!res.ok) {
-    let msg = `Erreur ${res.status}`;
+    let msg = `${res.status}`;
     try {
       const data = await res.json();
       if (typeof data.detail === "string") msg = data.detail;
-      else if (Array.isArray(data.detail)) msg = "Certains champs sont invalides.";
+      else if (Array.isArray(data.detail)) msg = currentLang() === "en" ? "Some fields are invalid." : "Certains champs sont invalides.";
     } catch {}
     throw new ApiError(res.status, msg);
   }
@@ -45,6 +51,7 @@ export interface Me {
   email: string;
   name: string;
   job: string;
+  lang: "fr" | "en";
   role: Role;
   is_superadmin: boolean;
   org: { id: number; name: string };

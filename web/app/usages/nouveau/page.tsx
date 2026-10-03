@@ -1,12 +1,16 @@
+"use client";
+
 import UseCaseForm from "@/components/UseCaseForm";
+import { useI18n } from "@/lib/i18n";
 
 export default function NewUseCasePage() {
+  const { m } = useI18n();
   return (
     <main className="page narrow">
       <div className="page-head">
         <div>
-          <h1>Partager un use case</h1>
-          <p className="sub">Ce que tu fais avec l&apos;IA peut faire gagner du temps à toute l&apos;organisation.</p>
+          <h1>{m.usecases.newTitle}</h1>
+          <p className="sub">{m.usecases.newSubtitle}</p>
         </div>
       </div>
       <UseCaseForm />

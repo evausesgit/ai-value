@@ -2,7 +2,7 @@
 
 import { use, useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { ROLES } from "@/lib/catalog";
+import { useI18n } from "@/lib/i18n";
 
 interface InviteInfo {
   org: string;
@@ -13,6 +13,7 @@ interface InviteInfo {
 
 export default function InvitationPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = use(params);
+  const { m, lang } = useI18n();
   const [info, setInfo] = useState<InviteInfo | null>(null);
   const [invalid, setInvalid] = useState("");
   const [form, setForm] = useState({ email: "", name: "", job: "", password: "" });
@@ -33,7 +34,7 @@ export default function InvitationPage({ params }: { params: Promise<{ token: st
     setBusy(true);
     setError("");
     try {
-      await api(`/auth/invite/${token}`, { body: form });
+      await api(`/auth/invite/${token}`, { body: { ...form, lang } });
       window.location.href = "/";
     } catch (err) {
       setError((err as Error).message);
@@ -45,50 +46,44 @@ export default function InvitationPage({ params }: { params: Promise<{ token: st
     return (
       <main className="center-box">
         <div className="card auth-card">
-          <h1>Lien invalide</h1>
-          <p className="sub">{invalid} Demande un nouveau lien à ton team lead.</p>
+          <h1>{m.invite.invalidTitle}</h1>
+          <p className="sub">{invalid} {m.invite.invalidHelp}</p>
         </div>
       </main>
     );
   }
-  if (!info) return <main className="center-box muted">Chargement…</main>;
+  if (!info) return <main className="center-box muted">{m.common.loading}</main>;
 
   return (
     <main className="center-box">
       <form className="card auth-card" onSubmit={submit}>
-        <h1>Bienvenue !</h1>
+        <h1>{m.invite.welcome}</h1>
         <p className="sub" style={{ marginBottom: "1.25rem" }}>
-          Tu rejoins <strong>{info.org}</strong>
-          {info.team ? (
-            <>
-              {" "}— équipe <strong>{info.team}</strong>
-            </>
-          ) : null}{" "}
-          en tant que {ROLES[info.role]?.toLowerCase()}.
+          {m.invite.joining(info.org, info.team, m.catalog.roles[info.role] ?? info.role)}
         </p>
         {error ? <div className="error">{error}</div> : null}
         <div className="field">
-          <label htmlFor="email">Email professionnel</label>
+          <label htmlFor="email">{m.login.email}</label>
           <input id="email" type="email" required readOnly={!!info.email} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
         </div>
         <div className="field">
-          <label htmlFor="name">Prénom et nom</label>
+          <label htmlFor="name">{m.invite.name}</label>
           <input id="name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         </div>
         <div className="field">
           <label htmlFor="job">
-            Métier <span className="hint">(ex. Product manager, Comptable…)</span>
+            {m.invite.job} <span className="hint">{m.invite.jobHint}</span>
           </label>
           <input id="job" value={form.job} onChange={(e) => setForm({ ...form, job: e.target.value })} />
         </div>
         <div className="field">
           <label htmlFor="password">
-            Mot de passe <span className="hint">(10 caractères minimum)</span>
+            {m.invite.password} <span className="hint">{m.invite.passwordHint}</span>
           </label>
           <input id="password" type="password" minLength={10} required autoComplete="new-password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
         </div>
         <button type="submit" disabled={busy} style={{ width: "100%", justifyContent: "center" }}>
-          {busy ? "Création…" : "Créer mon compte"}
+          {busy ? m.invite.submitting : m.invite.submit}
         </button>
       </form>
     </main>

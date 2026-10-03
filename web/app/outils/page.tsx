@@ -1,23 +1,28 @@
+"use client";
+
 import Link from "next/link";
 import ToolsEditor from "@/components/ToolsEditor";
+import { useI18n } from "@/lib/i18n";
 
 export default function ToolsPage() {
+  const { m } = useI18n();
   return (
     <main className="page narrow">
       <div className="page-head">
         <div>
-          <h1>Mes outils IA</h1>
-          <p className="sub">Indique ceux que tu utilises et à quelle fréquence. Enregistré automatiquement.</p>
+          <h1>{m.tools.title}</h1>
+          <p className="sub">{m.tools.subtitle}</p>
         </div>
         <Link href="/" className="btn ghost">
-          ← Mon espace
+          {m.tools.back}
         </Link>
       </div>
       <div className="card">
         <ToolsEditor />
       </div>
       <p className="muted small" style={{ marginTop: "1rem" }}>
-        Un outil manque ? Signale-le via le <Link href="/feedback">feedback</Link>, ton admin pourra l&apos;ajouter.
+        {m.tools.missing} <Link href="/feedback">{m.tools.missingLink}</Link>
+        {m.tools.missingEnd}
       </p>
     </main>
   );

@@ -55,6 +55,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(254), unique=True)
     name: Mapped[str] = mapped_column(String(120), default="")
     job: Mapped[str] = mapped_column(String(120), default="")
+    lang: Mapped[str] = mapped_column(String(5), default="fr", server_default="fr")
     password_hash: Mapped[str | None] = mapped_column(String(255))
     # member < lead < manager < admin (cf. app.deps.ROLE_RANK)
     role: Mapped[str] = mapped_column(String(16), default="member")

@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { api, type Me, type Role } from "./api";
+import { useI18n } from "./i18n";
 
 interface SessionValue {
   me: Me | null;
@@ -14,16 +15,20 @@ const Ctx = createContext<SessionValue>({ me: null, loading: true, refresh: asyn
 export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
+  const { setLang } = useI18n();
 
   const refresh = useCallback(async () => {
     try {
-      setMe(await api<Me>("/auth/me"));
+      const user = await api<Me>("/auth/me");
+      setMe(user);
+      // La langue du profil l'emporte sur celle du navigateur.
+      if (user.lang) setLang(user.lang);
     } catch {
       setMe(null);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [setLang]);
 
   useEffect(() => {
     refresh();

@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from collections import defaultdict, deque
 from datetime import UTC, datetime
+from typing import Literal
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Response
 from pydantic import BaseModel, EmailStr, Field
@@ -54,6 +55,7 @@ def me_payload(user: User) -> dict:
         "email": user.email,
         "name": user.name,
         "job": user.job,
+        "lang": user.lang,
         "role": user.role,
         "is_superadmin": user.is_superadmin,
         "org": {"id": user.org.id, "name": user.org.name},
@@ -98,9 +100,13 @@ def me(user: User = Depends(current_user)):
     return me_payload(user)
 
 
+Lang = Literal["fr", "en"]
+
+
 class ProfileIn(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     job: str = Field(default="", max_length=120)
+    lang: Lang | None = None
 
 
 @router.put("/me")
@@ -109,6 +115,21 @@ def update_me(
 ):
     user.name = body.name.strip()
     user.job = body.job.strip()
+    if body.lang:
+        user.lang = body.lang
+    session.commit()
+    return me_payload(user)
+
+
+class LangIn(BaseModel):
+    lang: Lang
+
+
+@router.put("/me/lang")
+def set_lang(
+    body: LangIn, user: User = Depends(current_user), session: Session = Depends(get_session)
+):
+    user.lang = body.lang
     session.commit()
     return me_payload(user)
 
@@ -162,6 +183,7 @@ class AcceptIn(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     job: str = Field(default="", max_length=120)
     password: str = Field(min_length=10, max_length=200)
+    lang: Lang = "fr"
 
 
 @router.post("/invite/{token}")
@@ -179,6 +201,7 @@ def accept_invite(
         name=body.name.strip(),
         job=body.job.strip(),
         role=invite.role,
+        lang=body.lang,
         password_hash=hash_password(body.password),
     )
     session.add(user)

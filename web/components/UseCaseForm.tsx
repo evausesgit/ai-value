@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, type Tool, type UseCase } from "@/lib/api";
-import { CATEGORIES, RISKS } from "@/lib/catalog";
+import { useI18n } from "@/lib/i18n";
 
 const EMPTY = {
   title: "",
@@ -18,6 +18,8 @@ const EMPTY = {
 
 export default function UseCaseForm({ initial, id }: { initial?: UseCase; id?: number }) {
   const router = useRouter();
+  const { m } = useI18n();
+  const u = m.usecases;
   const [tools, setTools] = useState<Tool[]>([]);
   const [form, setForm] = useState(EMPTY);
   const [error, setError] = useState("");
@@ -63,14 +65,14 @@ export default function UseCaseForm({ initial, id }: { initial?: UseCase; id?: n
     <form className="card" onSubmit={submit}>
       {error ? <div className="error">{error}</div> : null}
       <div className="field">
-        <label htmlFor="title">Titre</label>
-        <input id="title" required minLength={3} maxLength={160} placeholder="Ex. Résumer mes réunions clients en 5 minutes" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+        <label htmlFor="title">{u.fTitle}</label>
+        <input id="title" required minLength={3} maxLength={160} placeholder={u.fTitlePh} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
       </div>
       <div className="row">
         <div className="field grow">
-          <label htmlFor="cat">Catégorie</label>
+          <label htmlFor="cat">{u.fCategory}</label>
           <select id="cat" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
-            {Object.entries(CATEGORIES).map(([k, l]) => (
+            {Object.entries(m.catalog.categories).map(([k, l]) => (
               <option key={k} value={k}>
                 {l}
               </option>
@@ -79,27 +81,27 @@ export default function UseCaseForm({ initial, id }: { initial?: UseCase; id?: n
         </div>
         <div className="field grow">
           <label htmlFor="min">
-            Temps gagné <span className="hint">(minutes par semaine)</span>
+            {u.fMinutes} <span className="hint">{u.fMinutesHint}</span>
           </label>
           <input id="min" type="number" min={0} max={2400} step={15} value={form.minutes_saved_per_week} onChange={(e) => setForm({ ...form, minutes_saved_per_week: Number(e.target.value) })} />
         </div>
       </div>
       <div className="field">
-        <label htmlFor="problem">Le problème</label>
-        <textarea id="problem" placeholder="Qu'est-ce qui prenait du temps ou posait problème avant ?" value={form.problem} onChange={(e) => setForm({ ...form, problem: e.target.value })} />
+        <label htmlFor="problem">{u.fProblem}</label>
+        <textarea id="problem" placeholder={u.fProblemPh} value={form.problem} onChange={(e) => setForm({ ...form, problem: e.target.value })} />
       </div>
       <div className="field">
-        <label htmlFor="solution">Comment je m&apos;y prends</label>
-        <textarea id="solution" placeholder="Les étapes, ce que tu donnes à l'IA, comment tu vérifies le résultat…" value={form.solution} onChange={(e) => setForm({ ...form, solution: e.target.value })} style={{ minHeight: 120 }} />
+        <label htmlFor="solution">{u.fSolution}</label>
+        <textarea id="solution" placeholder={u.fSolutionPh} value={form.solution} onChange={(e) => setForm({ ...form, solution: e.target.value })} style={{ minHeight: 120 }} />
       </div>
       <div className="field">
         <label htmlFor="prompt">
-          Le prompt <span className="hint">(facultatif — sans donnée confidentielle)</span>
+          {u.fPrompt} <span className="hint">{u.fPromptHint}</span>
         </label>
         <textarea id="prompt" style={{ fontFamily: "ui-monospace, monospace", fontSize: "0.85rem" }} value={form.prompt} onChange={(e) => setForm({ ...form, prompt: e.target.value })} />
       </div>
       <div className="field">
-        <label>Outils utilisés</label>
+        <label>{u.fTools}</label>
         <div className="pills">
           {tools.map((t) => (
             <button key={t.id} type="button" className={`ghost small ${form.tools.includes(t.name) ? "on" : ""}`} onClick={() => toggleTool(t.name)}>
@@ -109,9 +111,9 @@ export default function UseCaseForm({ initial, id }: { initial?: UseCase; id?: n
         </div>
       </div>
       <div className="field">
-        <label>Niveau de risque <span className="hint">(données sensibles, impact d&apos;une erreur)</span></label>
+        <label>{u.fRisk} <span className="hint">{u.fRiskHint}</span></label>
         <div className="pills">
-          {Object.entries(RISKS).map(([k, l]) => (
+          {Object.entries(m.catalog.risks).map(([k, l]) => (
             <button key={k} type="button" className={`ghost small ${form.risk === k ? "on" : ""}`} onClick={() => setForm({ ...form, risk: k as UseCase["risk"] })}>
               {l}
             </button>
@@ -120,10 +122,10 @@ export default function UseCaseForm({ initial, id }: { initial?: UseCase; id?: n
       </div>
       <div className="row">
         <button type="submit" disabled={busy}>
-          {busy ? "Enregistrement…" : id ? "Enregistrer" : "Publier"}
+          {busy ? u.saving : id ? m.common.save : u.publish}
         </button>
         <button type="button" className="ghost" onClick={() => router.back()}>
-          Annuler
+          {m.common.cancel}
         </button>
       </div>
     </form>

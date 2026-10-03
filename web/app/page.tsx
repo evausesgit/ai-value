@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Kpi, Meter } from "@/components/charts";
 import { api, type Campaign } from "@/lib/api";
-import { DOMAINS, SKILL_LEVELS, fmtDay, fmtMinutes, fmtNum } from "@/lib/catalog";
+import { fmtDay, fmtMinutes, fmtNum } from "@/lib/catalog";
+import { useI18n } from "@/lib/i18n";
 import { useSession } from "@/lib/session";
 
 interface MeDash {
@@ -26,6 +27,7 @@ const TODO_LINKS: Record<string, string> = {
 
 export default function Home() {
   const { me } = useSession();
+  const { m } = useI18n();
   const [dash, setDash] = useState<MeDash | null>(null);
   const [campaigns, setCampaigns] = useState<Campaign[] | null>(null);
 
@@ -34,7 +36,7 @@ export default function Home() {
     api<Campaign[]>("/campaigns/mine").then(setCampaigns).catch(() => setCampaigns([]));
   }, []);
 
-  if (!me || !dash) return <main className="page muted">Chargement…</main>;
+  if (!me || !dash) return <main className="page muted">{m.common.loading}</main>;
   const open = (campaigns ?? []).filter((c) => c.open);
   const done = dash.todo.filter((t) => t.done).length;
 
@@ -42,42 +44,42 @@ export default function Home() {
     <main className="page">
       <div className="page-head">
         <div>
-          <h1>Bonjour {me.name.split(" ")[0]} 👋</h1>
+          <h1>{m.home.hello(me.name.split(" ")[0])}</h1>
           <p className="sub">
             {me.team ? `${me.team.name} · ` : ""}
             {me.org.name}
           </p>
         </div>
         <Link href="/usages/nouveau" className="btn">
-          + Partager un use case
+          {m.home.shareUseCase}
         </Link>
       </div>
 
       <div className="grid g3">
         <div className="card span2">
           <div className="card-head">
-            <h2>Demandes de mise à jour</h2>
-            {open.length ? <span className="pill blue">{open.filter((c) => !c.me?.completed_at).length} à faire</span> : null}
+            <h2>{m.home.requests}</h2>
+            {open.length ? <span className="pill blue">{m.home.toDo(open.filter((c) => !c.me?.completed_at).length)}</span> : null}
           </div>
           {campaigns === null ? (
-            <p className="muted">Chargement…</p>
+            <p className="muted">{m.common.loading}</p>
           ) : open.length === 0 ? (
             <div>
               <p className="muted" style={{ marginBottom: "0.75rem" }}>
-                Aucune demande en cours. Tu peux mettre ton profil à jour quand tu veux : tes outils, ton auto-évaluation, tes use cases.
+                {m.home.noRequest}
               </p>
               <div className="row">
                 <Link href="/outils" className="btn ghost small">
-                  Mes outils
+                  {m.home.myTools}
                 </Link>
                 <Link href="/competences" className="btn ghost small">
-                  Mon auto-évaluation
+                  {m.home.mySelfAssessment}
                 </Link>
                 <Link href="/usages?mine=1" className="btn ghost small">
-                  Mes use cases
+                  {m.home.myUseCases}
                 </Link>
                 <Link href="/feedback" className="btn ghost small">
-                  Donner un feedback
+                  {m.home.giveFeedback}
                 </Link>
               </div>
             </div>
@@ -91,18 +93,18 @@ export default function Home() {
                     <div>
                       <strong>{c.title}</strong>
                       <div className="muted small">
-                        Demandé par {c.author ?? "—"} · avant le {fmtDay(c.closes_on)}
+                        {m.home.requestedBy(c.author ?? "—", fmtDay(c.closes_on))}
                       </div>
                     </div>
                     <Link href={`/campagnes/${c.id}`} className={`btn ${sent ? "ghost" : ""} small`}>
-                      {sent ? "✓ Envoyée — modifier" : doneItems ? "Continuer" : "Faire ma mise à jour"}
+                      {sent ? m.home.sentEdit : doneItems ? m.home.continue : m.home.start}
                     </Link>
                   </div>
                   {!sent ? (
                     <div style={{ marginTop: "0.5rem" }}>
                       <Meter value={doneItems} max={c.items.length} />
                       <div className="muted tiny" style={{ marginTop: "0.25rem" }}>
-                        {doneItems} / {c.items.length} étapes · environ 5 minutes
+                        {m.home.steps(doneItems, c.items.length)}
                       </div>
                     </div>
                   ) : null}
@@ -113,7 +115,7 @@ export default function Home() {
         </div>
         <div className="card">
           <div className="card-head">
-            <h2>Pour bien démarrer</h2>
+            <h2>{m.home.gettingStarted}</h2>
             <span className="pill blue">
               {done}/{dash.todo.length}
             </span>
@@ -122,7 +124,7 @@ export default function Home() {
             {dash.todo.map((t) => (
               <li key={t.key} className={t.done ? "done" : ""}>
                 <span className="tick">{t.done ? "✓" : ""}</span>
-                {t.done ? <span className="txt">{t.label}</span> : <Link href={TODO_LINKS[t.key]}>{t.label}</Link>}
+                {t.done ? <span className="txt">{m.home.todo[t.key] ?? t.label}</span> : <Link href={TODO_LINKS[t.key]}>{m.home.todo[t.key] ?? t.label}</Link>}
               </li>
             ))}
           </ul>
@@ -131,47 +133,47 @@ export default function Home() {
 
       <div className="grid g4 section">
         <Kpi
-          label="Temps gagné grâce à l'IA"
+          label={m.home.timeSaved}
           value={dash.usecases.minutes_saved / 60}
           digits={1}
-          unit=" h/sem."
-          foot={dash.usecases.minutes_saved ? `${fmtMinutes(dash.usecases.minutes_saved)} via tes use cases et ceux que tu as adoptés` : "Partage tes use cases pour le mesurer"}
+          unit={` h ${m.common.perWeek}`}
+          foot={dash.usecases.minutes_saved ? m.home.timeSavedFoot(fmtMinutes(dash.usecases.minutes_saved)) : m.home.timeSavedEmpty}
         />
         <Kpi
-          label="Outils IA utilisés"
+          label={m.home.toolsUsed}
           value={dash.tools.active}
-          foot={<Link href="/outils">{dash.tools.declared ? "Mettre à jour mes outils" : "Déclarer mes outils"}</Link>}
+          foot={<Link href="/outils">{dash.tools.declared ? m.home.updateTools : m.home.declareTools}</Link>}
         />
         <Kpi
-          label="Use cases partagés"
+          label={m.home.useCasesShared}
           value={dash.usecases.count}
-          foot={`${dash.usecases.adopters} personne${dash.usecases.adopters > 1 ? "s les ont adoptés" : " l'a adopté"} · ${dash.usecases.adopted} adopté${dash.usecases.adopted > 1 ? "s" : ""}`}
+          foot={m.home.useCasesFoot(dash.usecases.adopters, dash.usecases.adopted)}
         />
-        <Kpi label="Score moyen aux quiz" value={dash.quiz_avg_pct} unit=" %" foot={`${dash.quizzes_done} quiz réalisé${dash.quizzes_done > 1 ? "s" : ""}`} />
+        <Kpi label={m.home.quizAvg} value={dash.quiz_avg_pct} unit=" %" foot={m.home.quizDone(dash.quizzes_done)} />
       </div>
 
       <div className="card section">
         <div className="card-head">
-          <h2>Mes compétences</h2>
+          <h2>{m.home.mySkills}</h2>
           <Link href="/competences" className="small">
-            M&apos;auto-évaluer →
+            {m.home.assessMe}
           </Link>
         </div>
         <div className="table-wrap">
           <table>
             <thead>
               <tr>
-                <th>Domaine</th>
-                <th>Mon niveau</th>
+                <th>{m.home.domain}</th>
+                <th>{m.home.myLevel}</th>
                 <th style={{ width: "30%" }} />
-                <th className="num">Moyenne de l&apos;organisation</th>
+                <th className="num">{m.home.orgAvg}</th>
               </tr>
             </thead>
             <tbody>
               {dash.skills.map((s) => (
                 <tr key={s.domain}>
-                  <td>{DOMAINS[s.domain]?.label ?? s.domain}</td>
-                  <td>{s.mine === null ? <span className="muted">Non évalué</span> : SKILL_LEVELS[s.mine]}</td>
+                  <td>{m.catalog.domains[s.domain]?.label ?? s.domain}</td>
+                  <td>{s.mine === null ? <span className="muted">{m.home.notAssessed}</span> : m.catalog.skillLevels[s.mine]}</td>
                   <td>
                     <Meter value={s.mine} max={3} />
                   </td>

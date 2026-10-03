@@ -2,11 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import LangSwitch from "@/components/LangSwitch";
 import { api } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 import { hasRole, useSession } from "@/lib/session";
 
 export default function Nav() {
   const { me } = useSession();
+  const { m } = useI18n();
   const path = usePathname();
   if (!me || path.startsWith("/login") || path.startsWith("/invitation")) {
     return (
@@ -15,20 +18,22 @@ export default function Nav() {
           <span className="brand">
             <span className="dot">AI</span> AI Value
           </span>
+          <div style={{ flex: 1 }} />
+          <LangSwitch />
         </div>
       </nav>
     );
   }
 
   const links: { href: string; label: string; show: boolean }[] = [
-    { href: "/", label: "Mon espace", show: true },
-    { href: "/usages", label: "Use cases", show: true },
-    { href: "/competences", label: "Compétences", show: true },
-    { href: "/feedback", label: "Feedback", show: true },
-    { href: "/campagnes", label: "Campagnes", show: hasRole(me, "lead") },
-    { href: "/equipe", label: "Mon équipe", show: hasRole(me, "lead") },
-    { href: "/organisation", label: "Organisation", show: hasRole(me, "manager") },
-    { href: "/admin", label: "Admin", show: hasRole(me, "admin") || hasRole(me, "lead") },
+    { href: "/", label: m.nav.home, show: true },
+    { href: "/usages", label: m.nav.usecases, show: true },
+    { href: "/competences", label: m.nav.skills, show: true },
+    { href: "/feedback", label: m.nav.feedback, show: true },
+    { href: "/campagnes", label: m.nav.campaigns, show: hasRole(me, "lead") },
+    { href: "/equipe", label: m.nav.team, show: hasRole(me, "lead") },
+    { href: "/organisation", label: m.nav.org, show: hasRole(me, "manager") },
+    { href: "/admin", label: m.nav.admin, show: hasRole(me, "lead") },
   ];
   const isActive = (href: string) => (href === "/" ? path === "/" : path.startsWith(href));
   const initials = (me.name || me.email)
@@ -59,11 +64,12 @@ export default function Nav() {
         </div>
         <div className="nav-user">
           <span className="org-name">{me.org.name}</span>
-          <Link href="/profil" className="avatar" title={`${me.name} — profil`}>
+          <LangSwitch />
+          <Link href="/profil" className="avatar" title={`${me.name} — ${m.common.profile}`}>
             {initials}
           </Link>
           <button className="ghost small" onClick={logout}>
-            Sortir
+            {m.common.signOut}
           </button>
         </div>
       </div>
