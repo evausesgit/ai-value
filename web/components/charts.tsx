@@ -301,11 +301,10 @@ export function Heatmap({
                     </td>
                   );
                 const step = Math.min(HEAT_STEPS.length - 1, Math.floor((v.avg / max) * HEAT_STEPS.length));
-                const dark = step >= 3;
                 return (
                   <td
                     key={columns[i].key}
-                    style={{ background: HEAT_STEPS[step], color: dark ? "#fff" : "var(--text)" }}
+                    style={{ background: HEAT_STEPS[step], color: `var(--heat-ink-${step})` }}
                     title={`${r.label} · ${columns[i].label} : ${fmtNum(v.avg, 1)} / ${max} (${v.n} réponses)`}
                   >
                     {fmtNum(v.avg, 1)}

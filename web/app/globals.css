@@ -27,6 +27,9 @@
   --seq-600: #184f95;
   --seq-700: #0d366b;
   --seq-empty: #f0efec;
+  /* Encre lisible sur chaque palier de la heatmap (clair : foncé puis blanc). */
+  --heat-ink-0: #0b0b0b; --heat-ink-1: #0b0b0b; --heat-ink-2: #0b0b0b;
+  --heat-ink-3: #ffffff; --heat-ink-4: #ffffff; --heat-ink-5: #ffffff;
 
   /* Statuts (toujours accompagnés d'un libellé) */
   --good: #0ca30c;
@@ -65,6 +68,9 @@
     --seq-600: #6da7ec;
     --seq-700: #9ec5f4;
     --seq-empty: #242422;
+    /* Sombre : la rampe s'éclaircit avec la valeur, l'encre s'inverse en haut. */
+    --heat-ink-0: #ffffff; --heat-ink-1: #ffffff; --heat-ink-2: #ffffff;
+    --heat-ink-3: #ffffff; --heat-ink-4: #0b0b0b; --heat-ink-5: #0b0b0b;
 
     --good-text: #6fd46f;
     --good-bg: #16301a;
