@@ -1,0 +1,58 @@
+# AI Value — déploiement Coolify (compose). Variables à définir dans Coolify :
+#   DB_PASSWORD          mot de passe PostgreSQL
+#   INTERNAL_API_TOKEN   jeton partagé relais Next ↔ API (chaîne aléatoire longue)
+#
+# Seul `web` est exposé (domaine Coolify, port 3000). `api` et `db` restent sur
+# le réseau interne du compose.
+
+services:
+  api:
+    build: .
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://aivalue:${DB_PASSWORD}@db:5432/aivalue
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
+      COOKIE_SECURE: "true"
+      PUBLIC_URL: ${PUBLIC_URL:-https://aivalue.ia-do-it.com}
+    expose:
+      - "8820"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8820/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build:
+      context: ./web
+      args:
+        API_INTERNAL_URL: http://api:8820
+    restart: unless-stopped
+    environment:
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
+    expose:
+      - "3000"
+    depends_on:
+      api:
+        condition: service_healthy
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: aivalue
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: aivalue
+    volumes:
+      - aivalue-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aivalue"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  aivalue-db:
