@@ -1,22 +1,7 @@
 from __future__ import annotations
 
-from app.config import settings
-from app.models import Pulse
 from app.provisioning import ensure_library
-from app.weeks import current_week
 from tests.conftest import client_for
-
-
-def test_pulse_upsert_and_validation(world):
-    c = client_for("dev@acme.fr")
-    body = {"usage_level": 3, "hours_saved": 2.5, "satisfaction": 4, "blockers": ["acces"]}
-    assert c.put("/me/pulse", json=body).status_code == 200
-    body["usage_level"] = 4
-    r = c.put("/me/pulse", json=body).json()
-    assert r["pulse"]["usage_level"] == 4
-    assert c.put("/me/pulse", json=body | {"blockers": ["inconnu"]}).status_code == 400
-    me = c.get("/dashboard/me").json()
-    assert me["pulse_done"] and me["streak"] == 1
 
 
 def test_tools_are_scoped_to_org(world):
@@ -77,32 +62,6 @@ def test_team_dashboard_access(world):
     assert client_for("manager@acme.fr").get(f"/dashboard/team?team_id={sales}").status_code == 200
     assert client_for("lead@acme.fr").get("/dashboard/org").status_code == 403
     assert client_for("x@autre.fr").get(f"/dashboard/team?team_id={tech}").status_code == 404
-
-
-def test_small_groups_hide_sensitive_aggregates(world, db):
-    week = current_week()
-    users = [world["lead"], world["dev"]]
-    for u in users:
-        db.add(
-            Pulse(
-                user_id=u.id,
-                org_id=u.org_id,
-                team_id=u.team_id,
-                week=week,
-                usage_level=3,
-                hours_saved=2,
-                satisfaction=2,
-                blockers=["acces"],
-            )
-        )
-    db.commit()
-    assert len(users) < settings.min_group_size
-    d = client_for("lead@acme.fr").get("/dashboard/team").json()
-    last = d["pulse"]["trend"][-1]
-    assert last["respondents"] == 2 and last["satisfaction"] is None
-    assert d["pulse"]["blockers"] is None
-    # Le tableau des membres ne contient jamais les réponses individuelles.
-    assert "satisfaction" not in d["roster"][0]
 
 
 def test_quiz_flow(world, db):

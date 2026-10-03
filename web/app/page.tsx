@@ -1,26 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Kpi, Meter } from "@/components/charts";
-import { api, type Pulse } from "@/lib/api";
-import { BLOCKERS, DOMAINS, SKILL_LEVELS, USAGE_LEVELS, fmtNum, fmtWeek } from "@/lib/catalog";
+import { api, type Campaign } from "@/lib/api";
+import { DOMAINS, SKILL_LEVELS, fmtDay, fmtMinutes, fmtNum } from "@/lib/catalog";
 import { useSession } from "@/lib/session";
 
 interface MeDash {
-  week: string;
-  pulse_done: boolean;
-  streak: number;
+  pending_campaigns: number;
   tools: { active: number; declared: number };
   skills: { domain: string; mine: number | null; org_avg: number | null }[];
   quiz_avg_pct: number | null;
   quizzes_done: number;
-  usecases: { count: number; adopters: number };
+  usecases: { count: number; adopters: number; adopted: number; minutes_saved: number };
   todo: { key: string; done: boolean; label: string }[];
 }
 
 const TODO_LINKS: Record<string, string> = {
-  pulse: "#pulse",
   tools: "/outils",
   skills: "/competences",
   quiz: "/competences#quiz",
@@ -30,13 +27,15 @@ const TODO_LINKS: Record<string, string> = {
 export default function Home() {
   const { me } = useSession();
   const [dash, setDash] = useState<MeDash | null>(null);
+  const [campaigns, setCampaigns] = useState<Campaign[] | null>(null);
 
-  const load = useCallback(() => {
+  useEffect(() => {
     api<MeDash>("/dashboard/me").then(setDash).catch(() => {});
+    api<Campaign[]>("/campaigns/mine").then(setCampaigns).catch(() => setCampaigns([]));
   }, []);
-  useEffect(load, [load]);
 
   if (!me || !dash) return <main className="page muted">Chargement…</main>;
+  const open = (campaigns ?? []).filter((c) => c.open);
   const done = dash.todo.filter((t) => t.done).length;
 
   return (
@@ -55,8 +54,62 @@ export default function Home() {
       </div>
 
       <div className="grid g3">
-        <div className="card span2" id="pulse">
-          <PulseCard week={dash.week} onSaved={load} />
+        <div className="card span2">
+          <div className="card-head">
+            <h2>Demandes de mise à jour</h2>
+            {open.length ? <span className="pill blue">{open.filter((c) => !c.me?.completed_at).length} à faire</span> : null}
+          </div>
+          {campaigns === null ? (
+            <p className="muted">Chargement…</p>
+          ) : open.length === 0 ? (
+            <div>
+              <p className="muted" style={{ marginBottom: "0.75rem" }}>
+                Aucune demande en cours. Tu peux mettre ton profil à jour quand tu veux : tes outils, ton auto-évaluation, tes use cases.
+              </p>
+              <div className="row">
+                <Link href="/outils" className="btn ghost small">
+                  Mes outils
+                </Link>
+                <Link href="/competences" className="btn ghost small">
+                  Mon auto-évaluation
+                </Link>
+                <Link href="/usages?mine=1" className="btn ghost small">
+                  Mes use cases
+                </Link>
+                <Link href="/feedback" className="btn ghost small">
+                  Donner un feedback
+                </Link>
+              </div>
+            </div>
+          ) : (
+            open.map((c) => {
+              const doneItems = c.me?.done_items.length ?? 0;
+              const sent = !!c.me?.completed_at;
+              return (
+                <div key={c.id} style={{ padding: "0.75rem 0", borderTop: "1px solid var(--grid)" }}>
+                  <div className="row" style={{ justifyContent: "space-between" }}>
+                    <div>
+                      <strong>{c.title}</strong>
+                      <div className="muted small">
+                        Demandé par {c.author ?? "—"} · avant le {fmtDay(c.closes_on)}
+                      </div>
+                    </div>
+                    <Link href={`/campagnes/${c.id}`} className={`btn ${sent ? "ghost" : ""} small`}>
+                      {sent ? "✓ Envoyée — modifier" : doneItems ? "Continuer" : "Faire ma mise à jour"}
+                    </Link>
+                  </div>
+                  {!sent ? (
+                    <div style={{ marginTop: "0.5rem" }}>
+                      <Meter value={doneItems} max={c.items.length} />
+                      <div className="muted tiny" style={{ marginTop: "0.25rem" }}>
+                        {doneItems} / {c.items.length} étapes · environ 5 minutes
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })
+          )}
         </div>
         <div className="card">
           <div className="card-head">
@@ -69,11 +122,7 @@ export default function Home() {
             {dash.todo.map((t) => (
               <li key={t.key} className={t.done ? "done" : ""}>
                 <span className="tick">{t.done ? "✓" : ""}</span>
-                {t.done ? (
-                  <span className="txt">{t.label}</span>
-                ) : (
-                  <Link href={TODO_LINKS[t.key]}>{t.label}</Link>
-                )}
+                {t.done ? <span className="txt">{t.label}</span> : <Link href={TODO_LINKS[t.key]}>{t.label}</Link>}
               </li>
             ))}
           </ul>
@@ -82,10 +131,11 @@ export default function Home() {
 
       <div className="grid g4 section">
         <Kpi
-          label="Pulses d'affilée"
-          value={dash.streak}
-          unit={dash.streak > 1 ? " semaines" : " semaine"}
-          foot={dash.pulse_done ? "Pulse de la semaine envoyé ✓" : "Pense au pulse de cette semaine"}
+          label="Temps gagné grâce à l'IA"
+          value={dash.usecases.minutes_saved / 60}
+          digits={1}
+          unit=" h/sem."
+          foot={dash.usecases.minutes_saved ? `${fmtMinutes(dash.usecases.minutes_saved)} via tes use cases et ceux que tu as adoptés` : "Partage tes use cases pour le mesurer"}
         />
         <Kpi
           label="Outils IA utilisés"
@@ -95,14 +145,9 @@ export default function Home() {
         <Kpi
           label="Use cases partagés"
           value={dash.usecases.count}
-          foot={`${dash.usecases.adopters} personne${dash.usecases.adopters > 1 ? "s les ont adoptés" : " l'a adopté"}`}
+          foot={`${dash.usecases.adopters} personne${dash.usecases.adopters > 1 ? "s les ont adoptés" : " l'a adopté"} · ${dash.usecases.adopted} adopté${dash.usecases.adopted > 1 ? "s" : ""}`}
         />
-        <Kpi
-          label="Score moyen aux quiz"
-          value={dash.quiz_avg_pct}
-          unit=" %"
-          foot={`${dash.quizzes_done} quiz réalisé${dash.quizzes_done > 1 ? "s" : ""}`}
-        />
+        <Kpi label="Score moyen aux quiz" value={dash.quiz_avg_pct} unit=" %" foot={`${dash.quizzes_done} quiz réalisé${dash.quizzes_done > 1 ? "s" : ""}`} />
       </div>
 
       <div className="card section">
@@ -138,142 +183,5 @@ export default function Home() {
         </div>
       </div>
     </main>
-  );
-}
-
-function PulseCard({ week, onSaved }: { week: string; onSaved: () => void }) {
-  const [pulse, setPulse] = useState<Pulse | null>(null);
-  const [loaded, setLoaded] = useState(false);
-  const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState({ usage_level: -1, hours_saved: 0, satisfaction: 0, blockers: [] as string[], comment: "" });
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    api<{ week: string; pulse: Pulse | null }>("/me/pulse").then((r) => {
-      setPulse(r.pulse);
-      if (r.pulse) setForm({ ...r.pulse });
-      setEditing(!r.pulse);
-      setLoaded(true);
-    });
-  }, []);
-
-  async function save() {
-    if (form.usage_level < 0 || form.satisfaction < 1) {
-      setError("Réponds aux deux premières questions.");
-      return;
-    }
-    setBusy(true);
-    setError("");
-    try {
-      const r = await api<{ pulse: Pulse }>("/me/pulse", { method: "PUT", body: form });
-      setPulse(r.pulse);
-      setEditing(false);
-      onSaved();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  if (!loaded) return <div className="muted">Chargement…</div>;
-
-  if (pulse && !editing) {
-    return (
-      <>
-        <div className="card-head">
-          <h2>Pulse de la semaine du {fmtWeek(week)}</h2>
-          <button className="ghost small" onClick={() => setEditing(true)}>
-            Modifier
-          </button>
-        </div>
-        <p className="success">Merci ! Ta réponse compte pour le suivi de ton équipe (agrégé et anonymisé).</p>
-        <div className="grid g3">
-          <div>
-            <div className="muted small">Usage de l&apos;IA</div>
-            <strong>{USAGE_LEVELS[pulse.usage_level]}</strong>
-          </div>
-          <div>
-            <div className="muted small">Temps gagné</div>
-            <strong>{fmtNum(pulse.hours_saved, 1)} h</strong>
-          </div>
-          <div>
-            <div className="muted small">Satisfaction</div>
-            <strong>{"★".repeat(pulse.satisfaction)}{"☆".repeat(5 - pulse.satisfaction)}</strong>
-          </div>
-        </div>
-      </>
-    );
-  }
-
-  const toggleBlocker = (b: string) =>
-    setForm((f) => ({ ...f, blockers: f.blockers.includes(b) ? f.blockers.filter((x) => x !== b) : [...f.blockers, b] }));
-
-  return (
-    <>
-      <div className="card-head">
-        <h2>Pulse de la semaine du {fmtWeek(week)}</h2>
-        <span className="muted small">1 minute · anonymisé</span>
-      </div>
-      {error ? <div className="error">{error}</div> : null}
-      <div className="field">
-        <label>Cette semaine, tu as utilisé l&apos;IA…</label>
-        <div className="scale">
-          {USAGE_LEVELS.map((l, i) => (
-            <button key={l} type="button" className={form.usage_level === i ? "on" : ""} onClick={() => setForm({ ...form, usage_level: i })}>
-              {l}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="field">
-        <label>Es-tu satisfait·e de ce que l&apos;IA t&apos;apporte ?</label>
-        <div className="scale">
-          {["Pas du tout", "Peu", "Moyennement", "Plutôt", "Très"].map((l, i) => (
-            <button key={l} type="button" className={form.satisfaction === i + 1 ? "on" : ""} onClick={() => setForm({ ...form, satisfaction: i + 1 })}>
-              {l}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="field">
-        <label htmlFor="hours">
-          Temps gagné cette semaine <span className="hint">(estimation en heures)</span>
-        </label>
-        <div className="row">
-          <input id="hours" type="number" min={0} max={40} step={0.5} value={form.hours_saved} onChange={(e) => setForm({ ...form, hours_saved: Number(e.target.value) })} style={{ maxWidth: 110 }} />
-          {[0.5, 1, 2, 4].map((h) => (
-            <button key={h} type="button" className={`ghost small ${form.hours_saved === h ? "on" : ""}`} onClick={() => setForm({ ...form, hours_saved: h })}>
-              {fmtNum(h, h % 1 ? 1 : 0)} h
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="field">
-        <label>Qu&apos;est-ce qui te freine ? <span className="hint">(facultatif, plusieurs choix)</span></label>
-        <div className="pills">
-          {Object.entries(BLOCKERS).map(([k, l]) => (
-            <button key={k} type="button" className={`ghost small ${form.blockers.includes(k) ? "on" : ""}`} onClick={() => toggleBlocker(k)}>
-              {l}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="field">
-        <label htmlFor="comment">Un mot ? <span className="hint">(facultatif)</span></label>
-        <textarea id="comment" value={form.comment} onChange={(e) => setForm({ ...form, comment: e.target.value })} placeholder="Une réussite, une difficulté, une idée…" style={{ minHeight: 60 }} />
-      </div>
-      <div className="row">
-        <button onClick={save} disabled={busy}>
-          {busy ? "Envoi…" : "Envoyer mon pulse"}
-        </button>
-        {pulse ? (
-          <button className="ghost" onClick={() => setEditing(false)}>
-            Annuler
-          </button>
-        ) : null}
-      </div>
-    </>
   );
 }

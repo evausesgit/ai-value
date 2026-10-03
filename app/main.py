@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api import admin, adoption, auth, dashboards, feedback, skills, usecases
+from app.api import admin, adoption, auth, campaigns, dashboards, feedback, skills, usecases
 from app.db import SessionLocal
 from app.provisioning import ensure_library
 
@@ -22,7 +22,7 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="AI Value", lifespan=lifespan)
-for module in (auth, adoption, skills, usecases, feedback, dashboards, admin):
+for module in (auth, adoption, skills, usecases, feedback, campaigns, dashboards, admin):
     app.include_router(module.router)
 
 

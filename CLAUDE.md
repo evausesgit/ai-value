@@ -16,7 +16,9 @@ définitions des indicateurs) : le garder synchronisé avec le code. Langue du p
 
 - Toute requête métier filtre sur `user.org_id`. Ne jamais renvoyer une ligne d'une autre org.
 - Les listes fermées se trouvent dans `app/catalog.py`, et leurs libellés dans `web/lib/catalog.ts` : modifier les deux.
-- Anonymat : agrégats de pulse masqués sous `min_group_size`. Un feedback anonyme a `author_id`
-  NULL. Jamais de réponse individuelle au pulse dans une vue lead ou manager.
+- Pas de pulse récurrent : l'évolution vient des **campagnes** lancées par un lead ou le management
+  (photo de l'état de chaque répondant à l'envoi, `campaign_participants`).
+- Anonymat : ressenti (satisfaction, freins, verbatims) masqué sous `min_group_size`. Un feedback
+  anonyme a `author_id` NULL. Jamais de ressenti individuel dans une vue lead ou manager.
 - Graphiques : méthode dataviz (une teinte pour les grandeurs, rampe bleue ordinale/séquentielle,
   infobulle au survol, pas de double axe), tokens dans `web/app/globals.css`.

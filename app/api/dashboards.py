@@ -1,14 +1,18 @@
 """Tableaux de bord : collaborateur, équipe (lead), organisation (management).
 
-Définitions (reprises telles quelles dans l'interface) :
-- **adoption** = part des membres actifs qui déclarent au moins un outil IA
-  utilisé chaque jour ou chaque semaine ;
-- **participation** = part des membres ayant répondu au pulse de la semaine ;
-- **intensité** = niveau d'usage moyen déclaré au pulse (0 à 4) ;
-- **temps gagné** = somme des heures déclarées au pulse de la semaine.
-Satisfaction, freins et temps gagné sont masqués quand moins de
-`min_group_size` personnes ont répondu : un lead ne peut pas déduire une réponse
-individuelle.
+Deux temporalités :
+- **état actuel**, calculé en direct sur ce que chacun a déclaré (outils,
+  auto-évaluation, use cases, quiz) — modifiable à tout moment ;
+- **évolution**, un point par campagne de mise à jour (photo de l'état de
+  chaque répondant à l'envoi, cf. app/api/campaigns.py).
+
+Définitions (reprises dans l'interface) :
+- **adoption** = part des membres déclarant au moins un outil IA utilisé chaque
+  jour ou chaque semaine ;
+- **temps gagné** = minutes/semaine des use cases, pour l'auteur et chacun de
+  ses adoptants ;
+- **participation** = répondants / personnes visées par la campagne.
+Satisfaction, freins et verbatims sont masqués sous `min_group_size` répondants.
 """
 
 from __future__ import annotations
@@ -21,13 +25,15 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.api.campaigns import in_scope, is_open
+from app.campaign_stats import summarize
 from app.catalog import ACTIVE_FREQUENCIES, DOMAINS
-from app.config import settings
 from app.db import get_session
 from app.deps import can_see_team, current_user, has_role, require_role
 from app.models import (
+    Campaign,
+    CampaignParticipant,
     Feedback,
-    Pulse,
     QuizAttempt,
     SkillAssessment,
     Team,
@@ -37,11 +43,8 @@ from app.models import (
     UseCaseReaction,
     User,
 )
-from app.weeks import current_week, last_weeks
 
 router = APIRouter(prefix="/dashboard", tags=["dashboards"])
-
-N_WEEKS = 12
 
 
 def _pct(num: int, den: int) -> float | None:
@@ -71,13 +74,35 @@ def _best_quiz_pct(session: Session, user_ids: list[int]) -> dict[int, float]:
     return {uid: mean(v) for uid, v in per_user.items()}
 
 
-def _scope_stats(session: Session, org_id: int, members: list[User], pulses: list[Pulse]) -> dict:
-    """Indicateurs communs à une équipe et à l'organisation."""
+def _evolution(
+    session: Session, org_id: int, team_id: int | None
+) -> list[tuple[Campaign, list[CampaignParticipant]]]:
+    """Campagnes de l'org (ordre chronologique) avec leurs participants du périmètre."""
+    campaigns = (
+        session.scalars(
+            select(Campaign).where(Campaign.org_id == org_id).order_by(Campaign.opens_at)
+        )
+        .unique()
+        .all()
+    )
+    if not campaigns:
+        return []
+    stmt = select(CampaignParticipant).where(
+        CampaignParticipant.campaign_id.in_([c.id for c in campaigns])
+    )
+    if team_id is not None:
+        stmt = stmt.where(CampaignParticipant.team_id == team_id)
+    by_campaign: dict[int, list[CampaignParticipant]] = defaultdict(list)
+    for p in session.scalars(stmt):
+        by_campaign[p.campaign_id].append(p)
+    return [(c, by_campaign[c.id]) for c in campaigns if by_campaign[c.id]]
+
+
+def _scope_stats(session: Session, org_id: int, members: list[User], team_id: int | None) -> dict:
     ids = [u.id for u in members]
     n = len(members)
-    k = settings.min_group_size
 
-    # --- Adoption déclarative (outils) ---
+    # --- Adoption déclarative (outils, état actuel) ---
     usages = (
         session.scalars(select(ToolUsage).where(ToolUsage.user_id.in_(ids))).all() if ids else []
     )
@@ -104,49 +129,7 @@ def _scope_stats(session: Session, org_id: int, members: list[User], pulses: lis
         reverse=True,
     )
 
-    # --- Pulse : série hebdomadaire ---
-    by_week: dict = defaultdict(list)
-    for p in pulses:
-        by_week[p.week].append(p)
-    trend = []
-    for w in last_weeks(N_WEEKS):
-        ps = by_week.get(w, [])
-        enough = len(ps) >= k
-        trend.append(
-            {
-                "week": w.isoformat(),
-                "respondents": len(ps),
-                "participation": _pct(len(ps), n),
-                "intensity": _avg([p.usage_level for p in ps]),
-                "using_pct": _pct(sum(1 for p in ps if p.usage_level >= 2), len(ps)),
-                "satisfaction": _avg([p.satisfaction for p in ps]) if enough else None,
-                "hours_saved": round(sum(p.hours_saved for p in ps), 1) if enough else None,
-            }
-        )
-
-    # Semaine de référence : la courante si elle a déjà assez de réponses, sinon la précédente.
-    cur, prev = trend[-1], trend[-2]
-    ref = cur if cur["respondents"] >= max(k, n // 3) else prev
-
-    since = current_week() - timedelta(weeks=4)
-    recent = [p for p in pulses if p.week > since]
-    blockers = Counter(b for p in recent for b in (p.blockers or []))
-    blockers_out = (
-        [{"blocker": b, "count": c} for b, c in blockers.most_common()]
-        if len({p.user_id for p in recent}) >= k
-        else None
-    )
-    comments = (
-        [
-            {"week": p.week.isoformat(), "text": p.comment}
-            for p in sorted(recent, key=lambda p: p.week, reverse=True)
-            if p.comment
-        ][:12]
-        if len({p.user_id for p in recent}) >= k
-        else None
-    )
-
-    # --- Connaissances ---
+    # --- Connaissances (état actuel) ---
     skills = (
         session.scalars(select(SkillAssessment).where(SkillAssessment.user_id.in_(ids))).all()
         if ids
@@ -164,9 +147,10 @@ def _scope_stats(session: Session, org_id: int, members: list[User], pulses: lis
         }
         for d in DOMAINS
     ]
+    all_levels = [s.level for s in skills]
     quiz = _best_quiz_pct(session, ids)
 
-    # --- Use cases ---
+    # --- Use cases et temps gagné (état actuel) ---
     ucs = (
         session.scalars(select(UseCase).where(UseCase.author_id.in_(ids))).unique().all()
         if ids
@@ -194,6 +178,51 @@ def _scope_stats(session: Session, org_id: int, members: list[User], pulses: lis
 
     top = sorted(ucs, key=lambda uc: adopters.get(uc.id, 0), reverse=True)[:5]
 
+    # --- Évolution : un point par campagne ---
+    evolution = []
+    for c, ps in _evolution(session, org_id, team_id):
+        s = summarize(ps)
+        evolution.append(
+            {
+                "id": c.id,
+                "title": c.title,
+                "date": c.opens_at.date().isoformat(),
+                "open": is_open(c),
+                **{
+                    k: s[k]
+                    for k in (
+                        "targeted",
+                        "respondents",
+                        "participation",
+                        "adoption_pct",
+                        "skills_avg",
+                        "hours_saved",
+                        "hours_saved_avg",
+                        "satisfaction",
+                    )
+                },
+            }
+        )
+    # Ressenti : la dernière campagne close qui en a collecté (sinon celle en cours).
+    feeling = None
+    evo_ps = _evolution(session, org_id, team_id)
+    ordered = [x for x in reversed(evo_ps) if not is_open(x[0])] + [
+        x for x in reversed(evo_ps) if is_open(x[0])
+    ]
+    for c, ps in ordered:
+        s = summarize(ps, with_comments=True)
+        if s["checkin_respondents"]:
+            feeling = {
+                "campaign": c.title,
+                "date": c.opens_at.date().isoformat(),
+                "respondents": s["checkin_respondents"],
+                "satisfaction": s["satisfaction"],
+                "usage_level": s["usage_level"],
+                "blockers": s["blockers"],
+                "comments": (s["comments"] or [])[:8] if s["comments"] is not None else None,
+            }
+            break
+
     return {
         "members": n,
         "adoption": {
@@ -202,19 +231,9 @@ def _scope_stats(session: Session, org_id: int, members: list[User], pulses: lis
             "active": len(active_users),
             "tools": tool_rows,
         },
-        "pulse": {
-            "reference_week": ref["week"],
-            "participation": ref["participation"],
-            "intensity": ref["intensity"],
-            "using_pct": ref["using_pct"],
-            "satisfaction": ref["satisfaction"],
-            "hours_saved": ref["hours_saved"],
-            "trend": trend,
-            "blockers": blockers_out,
-            "comments": comments,
-        },
         "skills": {
             "domains": skills_out,
+            "avg": _avg(all_levels),
             "assessed_pct": _pct(len({s.user_id for s in skills}), n),
             "quiz_avg_pct": _avg(list(quiz.values()), 1),
             "quiz_participants": len(quiz),
@@ -224,7 +243,6 @@ def _scope_stats(session: Session, org_id: int, members: list[User], pulses: lis
             "validated": sum(1 for uc in ucs if uc.status == "validated"),
             "last_30_days": sum(1 for uc in ucs if _recent(uc)),
             "contributors": len({uc.author_id for uc in ucs}),
-            # Heures/semaine : gain déclaré × (auteur + adoptants).
             "hours_saved_per_week": round(
                 sum(uc.minutes_saved_per_week * (1 + adopters.get(uc.id, 0)) for uc in ucs) / 60,
                 1,
@@ -240,6 +258,8 @@ def _scope_stats(session: Session, org_id: int, members: list[User], pulses: lis
                 for uc in top
             ],
         },
+        "evolution": evolution,
+        "feeling": feeling,
     }
 
 
@@ -248,14 +268,6 @@ def _members(session: Session, org_id: int, team_id: int | None = None) -> list[
     if team_id is not None:
         stmt = stmt.where(User.team_id == team_id)
     return list(session.scalars(stmt).unique())
-
-
-def _pulses(session: Session, org_id: int, team_id: int | None = None) -> list[Pulse]:
-    since = last_weeks(N_WEEKS)[0]
-    stmt = select(Pulse).where(Pulse.org_id == org_id, Pulse.week >= since)
-    if team_id is not None:
-        stmt = stmt.where(Pulse.team_id == team_id)
-    return list(session.scalars(stmt))
 
 
 def _feedback_counts(session: Session, org_id: int, team_id: int | None = None) -> dict:
@@ -270,6 +282,10 @@ def _feedback_counts(session: Session, org_id: int, team_id: int | None = None) 
     return {"by_status": dict(by_status), "by_kind": dict(by_kind)}
 
 
+def _org_teams(session: Session, org_id: int) -> list[Team]:
+    return list(session.scalars(select(Team).where(Team.org_id == org_id).order_by(Team.name)))
+
+
 @router.get("/team")
 def team_dashboard(
     team_id: int | None = None,
@@ -281,20 +297,10 @@ def team_dashboard(
     if team is None or team.org_id != user.org_id or not can_see_team(user, team.id):
         raise HTTPException(404, "Équipe introuvable.")
     members = _members(session, user.org_id, team.id)
-    stats = _scope_stats(session, user.org_id, members, _pulses(session, user.org_id, team.id))
+    stats = _scope_stats(session, user.org_id, members, team.id)
 
-    # Tableau des membres : activité seulement, jamais les réponses individuelles au pulse.
+    # Tableau des membres : activité seulement, jamais les réponses au ressenti.
     ids = [m.id for m in members]
-    since = current_week() - timedelta(weeks=4)
-    pulse_counts = (
-        Counter(
-            session.scalars(
-                select(Pulse.user_id).where(Pulse.user_id.in_(ids), Pulse.week > since)
-            ).all()
-        )
-        if ids
-        else Counter()
-    )
     active_tools = (
         Counter(
             session.scalars(
@@ -311,6 +317,25 @@ def team_dashboard(
         if ids
         else Counter()
     )
+    assessed = (
+        set(
+            session.scalars(select(SkillAssessment.user_id).where(SkillAssessment.user_id.in_(ids)))
+        )
+        if ids
+        else set()
+    )
+    answered = (
+        Counter(
+            session.scalars(
+                select(CampaignParticipant.user_id).where(
+                    CampaignParticipant.user_id.in_(ids),
+                    CampaignParticipant.completed_at.is_not(None),
+                )
+            ).all()
+        )
+        if ids
+        else Counter()
+    )
     quiz = _best_quiz_pct(session, ids)
     stats["roster"] = sorted(
         (
@@ -319,7 +344,8 @@ def team_dashboard(
                 "name": m.name or m.email,
                 "job": m.job,
                 "role": m.role,
-                "pulses_4w": pulse_counts.get(m.id, 0),
+                "campaigns": answered.get(m.id, 0),
+                "assessed": m.id in assessed,
                 "active_tools": active_tools.get(m.id, 0),
                 "usecases": uc_counts.get(m.id, 0),
                 "quiz_pct": round(quiz[m.id], 0) if m.id in quiz else None,
@@ -338,41 +364,38 @@ def team_dashboard(
     return stats
 
 
-def _org_teams(session: Session, org_id: int) -> list[Team]:
-    return list(session.scalars(select(Team).where(Team.org_id == org_id).order_by(Team.name)))
-
-
 @router.get("/org")
 def org_dashboard(
     user: User = Depends(require_role("manager")), session: Session = Depends(get_session)
 ):
     members = _members(session, user.org_id)
-    pulses = _pulses(session, user.org_id)
-    stats = _scope_stats(session, user.org_id, members, pulses)
+    stats = _scope_stats(session, user.org_id, members, None)
     stats["org"] = {"id": user.org.id, "name": user.org.name}
     stats["feedback"] = _feedback_counts(session, user.org_id)
 
-    # Comparaison par équipe (mêmes définitions, calculées équipe par équipe).
     rows = []
     heat = []
     for team in _org_teams(session, user.org_id):
         tm = [m for m in members if m.team_id == team.id]
         if not tm:
             continue
-        s = _scope_stats(session, user.org_id, tm, [p for p in pulses if p.team_id == team.id])
+        s = _scope_stats(session, user.org_id, tm, team.id)
+        # Dernière campagne close (une campagne en cours sous-estime la participation).
+        closed = [e for e in s["evolution"] if not e["open"]]
+        last = closed[-1] if closed else None
         rows.append(
             {
                 "id": team.id,
                 "name": team.name,
                 "members": s["members"],
                 "adoption_pct": s["adoption"]["active_pct"],
-                "participation": s["pulse"]["participation"],
-                "intensity": s["pulse"]["intensity"],
-                "satisfaction": s["pulse"]["satisfaction"],
-                "hours_saved": s["pulse"]["hours_saved"],
-                "usecases": s["usecases"]["count"],
+                "skills_avg": s["skills"]["avg"],
                 "quiz_avg_pct": s["skills"]["quiz_avg_pct"],
-                "adoption_trend": [w["using_pct"] for w in s["pulse"]["trend"]],
+                "usecases": s["usecases"]["count"],
+                "hours_saved": s["usecases"]["hours_saved_per_week"],
+                "participation": last["participation"] if last else None,
+                "satisfaction": last["satisfaction"] if last else None,
+                "adoption_trend": [e["adoption_pct"] for e in s["evolution"]],
             }
         )
         heat.append(
@@ -388,13 +411,6 @@ def org_dashboard(
 
 @router.get("/me")
 def me_dashboard(user: User = Depends(current_user), session: Session = Depends(get_session)):
-    week = current_week()
-    my_weeks = set(session.scalars(select(Pulse.week).where(Pulse.user_id == user.id)))
-    streak, w = 0, week if week in my_weeks else week - timedelta(weeks=1)
-    while w in my_weeks:
-        streak += 1
-        w -= timedelta(weeks=1)
-
     usages = session.scalars(select(ToolUsage).where(ToolUsage.user_id == user.id)).all()
     skills = {
         s.domain: s.level
@@ -419,22 +435,40 @@ def me_dashboard(user: User = Depends(current_user), session: Session = Depends(
         if my_ucs
         else 0
     )
+    adopted_minutes = session.scalars(
+        select(UseCase.minutes_saved_per_week)
+        .join(UseCaseReaction, UseCaseReaction.use_case_id == UseCase.id)
+        .where(
+            UseCaseReaction.user_id == user.id,
+            UseCaseReaction.kind == "adopt",
+            UseCase.author_id != user.id,
+        )
+    ).all()
     quiz = _best_quiz_pct(session, [user.id]).get(user.id)
     quizzes_done = session.scalar(
         select(func.count(func.distinct(QuizAttempt.quiz_id))).where(QuizAttempt.user_id == user.id)
     )
 
+    # Demandes de mise à jour en attente (campagnes ouvertes non envoyées).
+    pending = 0
+    for c in session.scalars(select(Campaign).where(Campaign.org_id == user.org_id)).unique():
+        if not (is_open(c) and in_scope(c, user)):
+            continue
+        done = session.scalar(
+            select(CampaignParticipant.completed_at).where(
+                CampaignParticipant.campaign_id == c.id, CampaignParticipant.user_id == user.id
+            )
+        )
+        pending += done is None
+
     todo = [
-        {"key": "pulse", "done": week in my_weeks, "label": "Répondre au pulse de la semaine"},
         {"key": "tools", "done": bool(usages), "label": "Déclarer les outils IA que tu utilises"},
         {"key": "skills", "done": len(skills) == len(DOMAINS), "label": "T'auto-évaluer"},
-        {"key": "quiz", "done": bool(quizzes_done), "label": "Faire un premier quiz"},
         {"key": "usecase", "done": bool(my_ucs), "label": "Partager un use case"},
+        {"key": "quiz", "done": bool(quizzes_done), "label": "Faire un premier quiz"},
     ]
     return {
-        "week": week.isoformat(),
-        "pulse_done": week in my_weeks,
-        "streak": streak,
+        "pending_campaigns": pending,
         "tools": {
             "active": sum(1 for u in usages if u.frequency in ACTIVE_FREQUENCIES),
             "declared": len(usages),
@@ -449,6 +483,11 @@ def me_dashboard(user: User = Depends(current_user), session: Session = Depends(
         ],
         "quiz_avg_pct": round(quiz, 0) if quiz is not None else None,
         "quizzes_done": quizzes_done,
-        "usecases": {"count": len(my_ucs), "adopters": adopters},
+        "usecases": {
+            "count": len(my_ucs),
+            "adopters": adopters,
+            "adopted": len(adopted_minutes),
+            "minutes_saved": sum(u.minutes_saved_per_week for u in my_ucs) + sum(adopted_minutes),
+        },
         "todo": todo,
     }

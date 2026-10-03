@@ -63,11 +63,20 @@ def cmd_create_user(args: argparse.Namespace) -> None:
 
 
 def cmd_demo(args: argparse.Namespace) -> None:
-    from scripts.demo_data import seed_demo
+    from scripts.demo_data import DEMO_NAME, seed_demo, seed_demo_campaigns
 
     with SessionLocal() as session:
         ensure_library(session)
-        seed_demo(session, admin_email=args.admin_email, admin_password=args.password)
+        org = session.scalar(select(Org).where(Org.name == DEMO_NAME))
+        if org is None:
+            seed_demo(session, admin_email=args.admin_email, admin_password=args.password)
+            return
+        # Démo existante : on complète seulement ce qui manque (campagnes).
+        email = args.admin_email.lower()
+        requester = session.scalar(select(User).where(func.lower(User.email) == email))
+        n = seed_demo_campaigns(session, org, requester)
+        session.commit()
+        print(f"Démo déjà présente : {n} campagne(s) ajoutée(s).")
 
 
 def main() -> None:

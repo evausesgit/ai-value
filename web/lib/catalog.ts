@@ -15,13 +15,14 @@ export const FREQUENCIES: Record<string, string> = {
   tried: "Juste essayé",
 };
 
-export const USAGE_LEVELS = [
-  "Pas du tout",
-  "Une ou deux fois",
-  "Plusieurs fois",
-  "Tous les jours",
-  "Plusieurs fois par jour",
-];
+export const USAGE_LEVELS = ["Jamais", "Rarement", "Chaque semaine", "Tous les jours", "Plusieurs fois par jour"];
+
+export const CAMPAIGN_ITEMS: Record<string, { label: string; hint: string }> = {
+  tools: { label: "Mes outils IA", hint: "Quels outils, à quelle fréquence" },
+  skills: { label: "Mon auto-évaluation", hint: "Mon niveau sur les 6 domaines" },
+  usecases: { label: "Mes use cases", hint: "Ce que je fais avec l'IA et le temps gagné" },
+  checkin: { label: "Mon ressenti", hint: "Satisfaction, freins, un mot (anonymisé)" },
+};
 
 export const BLOCKERS: Record<string, string> = {
   acces: "Pas d'accès / de licence",
@@ -83,11 +84,6 @@ export const FEEDBACK_STATUSES: Record<string, string> = {
   done: "Traité",
 };
 
-export function fmtWeek(iso: string): string {
-  const d = new Date(`${iso}T00:00:00`);
-  return d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
-}
-
 export function fmtDate(iso: string | null): string {
   if (!iso) return "";
   return new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" });
@@ -96,4 +92,14 @@ export function fmtDate(iso: string | null): string {
 export function fmtNum(v: number | null | undefined, digits = 0, suffix = ""): string {
   if (v === null || v === undefined) return "—";
   return `${v.toLocaleString("fr-FR", { maximumFractionDigits: digits, minimumFractionDigits: digits })}${suffix}`;
+}
+
+export function fmtDay(iso: string): string {
+  return new Date(`${iso.slice(0, 10)}T00:00:00`).toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
+}
+
+export function fmtMinutes(min: number): string {
+  if (min < 60) return `${min} min`;
+  const h = min / 60;
+  return `${h.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} h`;
 }

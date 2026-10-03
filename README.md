@@ -2,13 +2,15 @@
 
 Suivre l'adoption de l'IA dans les équipes, pour n'importe quelle entreprise :
 
-1. **Adoption** : chacun déclare ses outils IA et répond à un pulse hebdomadaire d'une minute ;
+1. **Adoption** : chacun déclare ses outils IA. Quand le manager le demande, une **campagne de mise à jour** collecte l'état de chacun ;
 2. **Connaissances** : auto-évaluation sur 6 domaines et quiz (bibliothèque commune + quiz maison) ;
 3. **Feedback** : freins, idées et besoins, anonymes si on le souhaite, avec réponse des leads ;
 4. **Use cases** : catalogue des usages concrets (problème, méthode, prompt, gain de temps), que l'on adopte et valide.
 
-Les collaborateurs sont autonomes, ils publient eux-mêmes. Les **team leads** ont le tableau de bord de leur
-équipe, et le **management** la vue organisation, avec comparaison des équipes et carte des compétences.
+Les collaborateurs sont autonomes : ils publient et mettent à jour quand ils veulent. Le manager n'a rien à saisir :
+il lance une campagne (outils, auto-évaluation, use cases et temps gagné, ressenti), suit la participation et lit les
+résultats. Chaque campagne devient un point sur les courbes d'évolution. Les **team leads** ont le tableau de
+bord de leur équipe, et le **management** la vue organisation, avec comparaison des équipes et carte des compétences.
 
 Multi-entreprise : une organisation par entreprise, données isolées. Le superadmin crée les
 organisations, et chaque admin invite ses équipes par lien.

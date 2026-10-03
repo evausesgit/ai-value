@@ -87,15 +87,6 @@ export interface UseCase {
   mine?: boolean;
 }
 
-export interface Pulse {
-  week: string;
-  usage_level: number;
-  hours_saved: number;
-  satisfaction: number;
-  blockers: string[];
-  comment: string;
-}
-
 export interface FeedbackItem {
   id: number;
   kind: string;
@@ -108,14 +99,65 @@ export interface FeedbackItem {
   created_at: string | null;
 }
 
-export interface TrendPoint {
-  week: string;
+export type CampaignItem = "tools" | "skills" | "usecases" | "checkin";
+
+export interface Campaign {
+  id: number;
+  title: string;
+  message: string;
+  team_ids: number[];
+  items: CampaignItem[];
+  opens_at: string | null;
+  closes_on: string;
+  open: boolean;
+  author: string | null;
+  // liste côté demandeur
+  targeted?: number;
+  respondents?: number;
+  can_manage?: boolean;
+  // côté participant
+  me?: {
+    done_items: CampaignItem[];
+    completed_at: string | null;
+    usage_level: number | null;
+    satisfaction: number | null;
+    blockers: string[];
+    comment: string;
+  } | null;
+}
+
+export interface CampaignSummary {
+  targeted: number;
   respondents: number;
   participation: number | null;
-  intensity: number | null;
-  using_pct: number | null;
+  adoption_pct: number | null;
+  active_tools_avg: number | null;
+  skills_avg: number | null;
+  skills: Record<string, number | null>;
+  usecases: number;
+  hours_saved: number;
+  hours_saved_avg: number | null;
   satisfaction: number | null;
-  hours_saved: number | null;
+  usage_level: number | null;
+  checkin_respondents: number;
+  blockers: { blocker: string; count: number }[] | null;
+  tools: { tool: string; active: number }[] | null;
+  comments?: string[] | null;
+}
+
+export interface EvolutionPoint {
+  id: number;
+  title: string;
+  date: string;
+  open: boolean;
+  targeted: number;
+  respondents: number;
+  participation: number | null;
+  adoption_pct: number | null;
+  skills_avg: number | null;
+  hours_saved: number;
+  hours_saved_avg: number | null;
+  satisfaction: number | null;
 }
 
 export interface ScopeStats {
@@ -126,19 +168,9 @@ export interface ScopeStats {
     active: number;
     tools: { tool: string; daily: number; weekly: number; monthly: number; tried: number; active: number }[];
   };
-  pulse: {
-    reference_week: string;
-    participation: number | null;
-    intensity: number | null;
-    using_pct: number | null;
-    satisfaction: number | null;
-    hours_saved: number | null;
-    trend: TrendPoint[];
-    blockers: { blocker: string; count: number }[] | null;
-    comments: { week: string; text: string }[] | null;
-  };
   skills: {
     domains: { domain: string; avg: number | null; n: number; dist: number[] }[];
+    avg: number | null;
     assessed_pct: number | null;
     quiz_avg_pct: number | null;
     quiz_participants: number;
@@ -151,5 +183,15 @@ export interface ScopeStats {
     hours_saved_per_week: number;
     top: { id: number; title: string; category: string; adopters: number; author: string | null }[];
   };
+  evolution: EvolutionPoint[];
+  feeling: {
+    campaign: string;
+    date: string;
+    respondents: number;
+    satisfaction: number | null;
+    usage_level: number | null;
+    blockers: { blocker: string; count: number }[] | null;
+    comments: string[] | null;
+  } | null;
   feedback: { by_status: Record<string, number>; by_kind: Record<string, number> };
 }

@@ -14,18 +14,18 @@ interface OrgStats extends ScopeStats {
     name: string;
     members: number;
     adoption_pct: number | null;
-    participation: number | null;
-    intensity: number | null;
-    satisfaction: number | null;
-    hours_saved: number | null;
-    usecases: number;
+    skills_avg: number | null;
     quiz_avg_pct: number | null;
+    usecases: number;
+    hours_saved: number;
+    participation: number | null;
+    satisfaction: number | null;
     adoption_trend: (number | null)[];
   }[];
   skills_heatmap: { domains: string[]; rows: { team: string; values: { avg: number | null; n: number }[] }[] };
 }
 
-type SortKey = "name" | "members" | "adoption_pct" | "participation" | "intensity" | "satisfaction" | "hours_saved" | "usecases" | "quiz_avg_pct";
+type SortKey = "name" | "members" | "adoption_pct" | "skills_avg" | "hours_saved" | "usecases" | "quiz_avg_pct" | "participation" | "satisfaction";
 
 export default function OrgPage() {
   const [data, setData] = useState<OrgStats | null>(null);
@@ -80,13 +80,13 @@ export default function OrgPage() {
                 {th("name", "Équipe", false)}
                 {th("members", "Membres")}
                 {th("adoption_pct", "Adoption")}
-                <th>12 semaines</th>
-                {th("participation", "Pulse")}
-                {th("intensity", "Intensité")}
-                {th("satisfaction", "Satisf.")}
-                {th("hours_saved", "Heures")}
+                <th>Campagnes</th>
+                {th("hours_saved", "Temps gagné")}
+                {th("skills_avg", "Compétences")}
                 {th("usecases", "Use cases")}
                 {th("quiz_avg_pct", "Quiz")}
+                {th("participation", "Participation")}
+                {th("satisfaction", "Satisf.")}
               </tr>
             </thead>
             <tbody>
@@ -99,24 +99,24 @@ export default function OrgPage() {
                   </td>
                   <td className="num">{t.members}</td>
                   <td className="num">{fmtNum(t.adoption_pct, 0, " %")}</td>
-                  <td title="Part des répondants utilisant l'IA plusieurs fois par semaine">
+                  <td title="Adoption à chaque campagne">
                     <Sparkline values={t.adoption_trend} />
                   </td>
+                  <td className="num">{fmtNum(t.hours_saved, 0, " h/sem.")}</td>
+                  <td className="num">{fmtNum(t.skills_avg, 1)}</td>
+                  <td className="num">{t.usecases}</td>
+                  <td className="num">{fmtNum(t.quiz_avg_pct, 0, " %")}</td>
                   <td className="num">{fmtNum(t.participation, 0, " %")}</td>
-                  <td className="num">{fmtNum(t.intensity, 1)}</td>
                   <td className="num" title={t.satisfaction === null ? "Masqué : moins de 3 réponses" : ""}>
                     {fmtNum(t.satisfaction, 1)}
                   </td>
-                  <td className="num">{fmtNum(t.hours_saved, 0, " h")}</td>
-                  <td className="num">{t.usecases}</td>
-                  <td className="num">{fmtNum(t.quiz_avg_pct, 0, " %")}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
         <p className="muted tiny" style={{ margin: "0.6rem 0 0" }}>
-          Adoption = membres déclarant un outil IA utilisé chaque jour ou chaque semaine. Pulse = participation de la semaine de référence.
+          Adoption = membres déclarant un outil IA utilisé chaque jour ou chaque semaine (état actuel). Participation et satisfaction : dernière campagne close.
         </p>
       </div>
 

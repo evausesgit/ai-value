@@ -1,5 +1,5 @@
 """Organisation de démonstration « Acme Industries » : 8 équipes, ~50 personnes,
-12 semaines de pulses, use cases, feedback, quiz. Données fictives, déterministes
+5 campagnes de mise à jour (dont une en cours), use cases, feedback, quiz. Données fictives, déterministes
 (graine fixe), pour montrer les tableaux de bord remplis.
 """
 
@@ -14,9 +14,10 @@ from sqlalchemy.orm import Session
 
 from app.catalog import DOMAINS
 from app.models import (
+    Campaign,
+    CampaignParticipant,
     Feedback,
     Org,
-    Pulse,
     Quiz,
     QuizAttempt,
     SkillAssessment,
@@ -29,7 +30,6 @@ from app.models import (
 )
 from app.provisioning import create_org, slugify
 from app.security import hash_password
-from app.weeks import last_weeks
 
 DEMO_NAME = "Acme Industries (démo)"
 DEMO_DOMAIN = "demo.acme.test"
@@ -614,39 +614,6 @@ def seed_demo(session: Session, admin_email: str, admin_password: str | None) ->
             if other not in favs:
                 session.add(ToolUsage(user_id=u.id, tool_id=tools[other].id, frequency="tried"))
 
-    # --- Pulses (12 semaines, adoption qui progresse) ---
-    weeks = last_weeks(12)
-    for wi, week in enumerate(weeks):
-        progress = wi / (len(weeks) - 1)
-        current = wi == len(weeks) - 1
-        for u, prop, team_name in people:
-            answer_p = (0.45 + 0.35 * progress) * (0.7 + 0.4 * prop)
-            if current:
-                answer_p *= 0.55  # semaine en cours : tout le monde n'a pas encore répondu
-            if rnd.random() > answer_p:
-                continue
-            level = round(_clamp(prop * 3.2 + progress * 1.1 - 0.9 + rnd.gauss(0, 0.45), 0, 4))
-            hours = round(_clamp(level * 0.9 + rnd.gauss(0, 0.7), 0, 12) * 2) / 2
-            sat = round(_clamp(2.4 + prop * 2 + progress * 0.4 + rnd.gauss(0, 0.6), 1, 5))
-            blockers = []
-            if prop < 0.6 and rnd.random() < 0.7:
-                blockers = rnd.sample(["acces", "formation", "securite", "temps", "regles"], 2)
-            elif rnd.random() < 0.3:
-                blockers = rnd.sample(["qualite", "temps", "securite", "pertinence"], 1)
-            session.add(
-                Pulse(
-                    user_id=u.id,
-                    org_id=org.id,
-                    team_id=u.team_id,
-                    week=week,
-                    usage_level=level,
-                    hours_saved=hours,
-                    satisfaction=sat,
-                    blockers=sorted(blockers),
-                    comment=rnd.choice(COMMENTS) if rnd.random() < 0.12 else "",
-                )
-            )
-
     # --- Auto-évaluation et quiz ---
     bias = {
         "prompting": 0.3,
@@ -727,8 +694,158 @@ def seed_demo(session: Session, admin_email: str, admin_password: str | None) ->
             )
         )
 
+    session.flush()
+    seed_demo_campaigns(session, org, admin)
+
     session.commit()
     print(f"Démo « {DEMO_NAME} » créée : {len(people)} personnes, {len(USE_CASES)} use cases.")
     print(f"Admin : {email}")
     if not admin_password:
         print(f"Mot de passe : {password}")
+
+
+MONTHS = [
+    "janvier",
+    "février",
+    "mars",
+    "avril",
+    "mai",
+    "juin",
+    "juillet",
+    "août",
+    "septembre",
+    "octobre",
+    "novembre",
+    "décembre",
+]
+# (jours avant aujourd'hui, éléments demandés) ; la dernière est en cours.
+CAMPAIGN_PLAN = [
+    (150, ["tools", "skills", "checkin"]),
+    (105, ["tools", "skills", "usecases", "checkin"]),
+    (63, ["tools", "skills", "usecases", "checkin"]),
+    (24, ["tools", "skills", "usecases", "checkin"]),
+    (2, ["tools", "skills", "usecases", "checkin"]),
+]
+
+
+def seed_demo_campaigns(session: Session, org: Org, requester: User) -> int:
+    """Campagnes passées + une en cours, reconstituées depuis l'état actuel déclaré.
+
+    Idempotent : ne fait rien si l'organisation a déjà des campagnes. Les comptes
+    réels (hors domaine de démo) sont visés par la campagne en cours, sans réponse.
+    """
+    if session.scalar(select(func.count()).where(Campaign.org_id == org.id)):
+        return 0
+    rnd = random.Random(7)
+    today = datetime.now(UTC)
+    users = session.scalars(select(User).where(User.org_id == org.id, User.active)).unique().all()
+    tools = {t.id: t.name for t in session.scalars(select(Tool).where(Tool.org_id == org.id))}
+    usage = {}
+    for u in session.scalars(select(ToolUsage).where(ToolUsage.user_id.in_([x.id for x in users]))):
+        usage.setdefault(u.user_id, {})[tools[u.tool_id]] = u.frequency
+    skills = {}
+    for s in session.scalars(
+        select(SkillAssessment).where(SkillAssessment.user_id.in_([x.id for x in users]))
+    ):
+        skills.setdefault(s.user_id, {})[s.domain] = s.level
+    ucs = session.scalars(select(UseCase).where(UseCase.org_id == org.id)).unique().all()
+    adopted = {}
+    for r in session.scalars(select(UseCaseReaction).where(UseCaseReaction.kind == "adopt")):
+        adopted.setdefault(r.user_id, []).append(r.use_case_id)
+    uc_by_id = {uc.id: uc for uc in ucs}
+
+    def propensity(uid: int) -> float:
+        active = sum(1 for f in usage.get(uid, {}).values() if f in ("daily", "weekly"))
+        lv = list(skills.get(uid, {}).values())
+        return _clamp(0.15 + 0.2 * active + 0.12 * (sum(lv) / len(lv) if lv else 0), 0.05, 0.95)
+
+    n_plan = len(CAMPAIGN_PLAN)
+    for k, (days_ago, items) in enumerate(CAMPAIGN_PLAN):
+        opens = today - timedelta(days=days_ago)
+        current = k == n_plan - 1
+        progress = k / (n_plan - 1)
+        month = MONTHS[opens.month - 1]
+        title = f"Point IA d'{month}" if month[0] in "aeiou" else f"Point IA de {month}"
+        c = Campaign(
+            org_id=org.id,
+            created_by=requester.id,
+            title=title,
+            message="Prends 5 minutes pour mettre à jour tes outils, ton auto-évaluation et "
+            "tes use cases : c'est ce qui nous permet de mesurer le temps gagné et "
+            "d'organiser les bonnes formations. Merci !",
+            team_ids=[],
+            items=items,
+            opens_at=opens,
+            closes_on=(opens + timedelta(days=14)).date()
+            if not current
+            else (today + timedelta(days=11)).date(),
+            closed=False,
+        )
+        session.add(c)
+        session.flush()
+        for u in users:
+            demo = u.email.endswith(f"@{DEMO_DOMAIN}")
+            p = CampaignParticipant(campaign_id=c.id, user_id=u.id, team_id=u.team_id)
+            session.add(p)
+            if not demo:
+                continue
+            prop = propensity(u.id)
+            answer = (0.5 + 0.06 * k + 0.25 * prop) * (0.55 if current else 1)
+            if rnd.random() > answer:
+                continue
+            # Plus la campagne est ancienne, plus l'état photographié est en retrait.
+            keep = 0.4 + 0.6 * progress
+            p.tools = {
+                name: freq
+                for name, freq in usage.get(u.id, {}).items()
+                if rnd.random() < keep + 0.15
+            }
+            p.active_tools = sum(1 for f in p.tools.values() if f in ("daily", "weekly"))
+            if "skills" in items:
+                p.skills = {
+                    d: int(_clamp(round(lv - (1 - progress) * 1.1 + rnd.gauss(0, 0.3)), 0, 3))
+                    for d, lv in skills.get(u.id, {}).items()
+                }
+            own = [
+                uc
+                for uc in ucs
+                if uc.author_id == u.id and uc.created_at and _aware(uc.created_at) <= opens
+            ]
+            adopted_now = [
+                uc_by_id[i] for i in adopted.get(u.id, []) if i in uc_by_id and rnd.random() < keep
+            ]
+            p.usecases = len(own)
+            p.adopted = len(adopted_now)
+            base = round(prop * 90 * keep)  # usages non formalisés en use case
+            p.minutes_saved = (
+                sum(uc.minutes_saved_per_week for uc in own)
+                + sum(uc.minutes_saved_per_week for uc in adopted_now)
+                + base
+            )
+            if "checkin" in items:
+                p.usage_level = round(
+                    _clamp(prop * 3.4 + progress * 1.0 - 0.9 + rnd.gauss(0, 0.45), 0, 4)
+                )
+                p.satisfaction = round(
+                    _clamp(2.3 + prop * 2 + progress * 0.5 + rnd.gauss(0, 0.6), 1, 5)
+                )
+                if prop < 0.55 and rnd.random() < 0.7:
+                    p.blockers = sorted(
+                        rnd.sample(["acces", "formation", "securite", "temps", "regles"], 2)
+                    )
+                elif rnd.random() < 0.3:
+                    p.blockers = sorted(
+                        rnd.sample(["qualite", "temps", "securite", "pertinence"], 1)
+                    )
+                if rnd.random() < 0.15:
+                    p.comment = rnd.choice(COMMENTS)
+            p.done_items = list(items)
+            p.completed_at = opens + timedelta(
+                days=rnd.randint(0, 9 if not current else 2), hours=rnd.randint(8, 18)
+            )
+    session.flush()
+    return n_plan
+
+
+def _aware(dt: datetime) -> datetime:
+    return dt if dt.tzinfo else dt.replace(tzinfo=UTC)

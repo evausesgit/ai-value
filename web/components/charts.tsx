@@ -6,7 +6,7 @@
 // avec infobulle, jamais de double axe.
 
 import { useEffect, useRef, useState } from "react";
-import { fmtNum, fmtWeek } from "@/lib/catalog";
+import { fmtNum } from "@/lib/catalog";
 
 export function Kpi({
   label,
@@ -126,7 +126,7 @@ export function ToolBars({
   );
 }
 
-/** Courbe hebdomadaire (une série) avec réticule et infobulle au survol. */
+/** Courbe (une série, un point par campagne) avec réticule et infobulle au survol. */
 export function TrendChart({
   points,
   label,
@@ -135,7 +135,8 @@ export function TrendChart({
   digits = 0,
   height = 180,
 }: {
-  points: { week: string; value: number | null; note?: string }[];
+  // label : texte court sous l'axe ; title : en-tête de l'infobulle.
+  points: { key: string; label: string; title: string; value: number | null; note?: string }[];
   label: string;
   max?: number;
   unit?: string;
@@ -158,7 +159,8 @@ export function TrendChart({
   const pad = { l: 36, r: 12, t: 12, b: 26 };
   const vals = points.map((p) => p.value).filter((v): v is number => v !== null);
   const top = max ?? Math.max(1, ...vals) * 1.1;
-  const x = (i: number) => pad.l + (i * (W - pad.l - pad.r)) / Math.max(1, points.length - 1);
+  const x = (i: number) =>
+    points.length === 1 ? (pad.l + W - pad.r) / 2 : pad.l + (i * (W - pad.l - pad.r)) / (points.length - 1);
   const y = (v: number) => pad.t + (1 - v / top) * (H - pad.t - pad.b);
   const ticks = [0, top / 2, top];
 
@@ -199,9 +201,9 @@ export function TrendChart({
             </g>
           ))}
           {points.map((p, i) =>
-            (points.length - 1 - i) % (W < 520 ? 3 : 2) === 0 ? (
-              <text key={p.week} x={x(i)} y={H - 6} textAnchor="middle">
-                {fmtWeek(p.week)}
+            points.length <= (W < 520 ? 4 : 8) || (points.length - 1 - i) % (W < 520 ? 3 : 2) === 0 ? (
+              <text key={p.key} x={x(i)} y={H - 6} textAnchor={points.length === 1 ? "middle" : i === 0 ? "start" : i === points.length - 1 ? "end" : "middle"}>
+                {p.label}
               </text>
             ) : null,
           )}
@@ -238,8 +240,8 @@ export function TrendChart({
             top: `${((h.value !== null ? y(h.value) : pad.t) / H) * 100}%`,
           }}
         >
-          <strong>Semaine du {fmtWeek(h.week)}</strong>
-          {label} : {h.value === null ? "masqué / sans réponse" : `${fmtNum(h.value, digits)}${unit}`}
+          <strong>{h.title}</strong>
+          {label} : {h.value === null ? "masqué (moins de 3 réponses)" : `${fmtNum(h.value, digits)}${unit}`}
           {h.note ? <div className="muted">{h.note}</div> : null}
         </div>
       ) : null}

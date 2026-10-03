@@ -1,34 +1,57 @@
 "use client";
 
 // Bloc commun aux tableaux de bord équipe et organisation (mêmes définitions,
-// cf. app/api/dashboards.py).
+// cf. app/api/dashboards.py) : état actuel en direct + évolution par campagne.
 
 import Link from "next/link";
 import { useState } from "react";
 import { BarList, Delta, Kpi, ToolBars, TrendChart } from "@/components/charts";
-import type { ScopeStats } from "@/lib/api";
-import { BLOCKERS, CATEGORIES, DOMAINS, FEEDBACK_STATUSES, SKILL_LEVELS, fmtNum, fmtWeek } from "@/lib/catalog";
+import type { EvolutionPoint, ScopeStats } from "@/lib/api";
+import { BLOCKERS, CATEGORIES, DOMAINS, FEEDBACK_STATUSES, SKILL_LEVELS, fmtDay, fmtNum } from "@/lib/catalog";
 
-type Metric = "using_pct" | "participation" | "intensity" | "satisfaction" | "hours_saved";
+type Metric = "adoption_pct" | "hours_saved_avg" | "skills_avg" | "satisfaction" | "participation";
 const METRICS: { key: Metric; label: string; unit: string; digits: number; max?: number }[] = [
-  { key: "using_pct", label: "Utilisent l'IA plusieurs fois / sem.", unit: " %", digits: 0, max: 100 },
-  { key: "participation", label: "Participation au pulse", unit: " %", digits: 0, max: 100 },
-  { key: "intensity", label: "Intensité d'usage (0-4)", unit: "", digits: 1, max: 4 },
+  { key: "adoption_pct", label: "Adoption", unit: " %", digits: 0, max: 100 },
+  { key: "hours_saved_avg", label: "Temps gagné / pers. / sem.", unit: " h", digits: 1 },
+  { key: "skills_avg", label: "Niveau de compétences (0-3)", unit: "", digits: 1, max: 3 },
   { key: "satisfaction", label: "Satisfaction (1-5)", unit: "", digits: 1, max: 5 },
-  { key: "hours_saved", label: "Heures gagnées déclarées", unit: " h", digits: 0 },
+  { key: "participation", label: "Participation", unit: " %", digits: 0, max: 100 },
 ];
 
+function shortLabel(e: EvolutionPoint) {
+  return new Date(`${e.date}T00:00:00`).toLocaleDateString("fr-FR", { month: "short", year: "2-digit" });
+}
+
 export default function ScopeDashboard({ s, scopeLabel }: { s: ScopeStats; scopeLabel: string }) {
-  const [metric, setMetric] = useState<Metric>("using_pct");
+  const [metric, setMetric] = useState<Metric>("adoption_pct");
   const m = METRICS.find((x) => x.key === metric)!;
-  const trend = s.pulse.trend;
-  const refIdx = trend.findIndex((w) => w.week === s.pulse.reference_week);
-  const before = refIdx >= 4 ? trend[refIdx - 4] : null;
+  const evo = s.evolution;
+  // Comparaison : les deux dernières campagnes closes.
+  const answered = evo.filter((e) => e.respondents > 0 && !e.open);
+  const last = answered[answered.length - 1] ?? null;
+  const prev = answered[answered.length - 2] ?? null;
+  const current = evo.find((e) => e.open) ?? null;
   const openFeedback = (s.feedback.by_status.new ?? 0) + (s.feedback.by_status.in_progress ?? 0);
 
   return (
     <>
-      {/* --- Indicateurs clés --- */}
+      {current ? (
+        <div className="card" style={{ marginBottom: "1rem", background: "var(--accent-soft)", borderColor: "transparent" }}>
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            <div>
+              <strong>Campagne en cours : {current.title}</strong>
+              <div className="small">
+                {current.respondents} / {current.targeted} réponses ({fmtNum(current.participation)} %)
+              </div>
+            </div>
+            <Link href={`/campagnes/${current.id}`} className="btn small">
+              Voir les résultats
+            </Link>
+          </div>
+        </div>
+      ) : null}
+
+      {/* --- État actuel --- */}
       <div className="grid g4">
         <Kpi
           label="Adoption"
@@ -37,44 +60,55 @@ export default function ScopeDashboard({ s, scopeLabel }: { s: ScopeStats; scope
           foot={`${s.adoption.active} / ${s.members} utilisent un outil IA chaque semaine`}
         />
         <Kpi
-          label="Utilisent l'IA cette semaine"
-          value={s.pulse.using_pct}
-          unit=" %"
+          label="Temps gagné"
+          value={s.usecases.hours_saved_per_week}
+          unit=" h/sem."
           foot={
             <>
-              Pulse du {fmtWeek(s.pulse.reference_week)} ·{" "}
-              <Delta now={s.pulse.using_pct} before={before?.using_pct ?? null} unit=" pts" /> sur 4 sem.
+              via les use cases et leurs adoptants
+              {last && prev ? (
+                <>
+                  {" "}· <Delta now={last.hours_saved_avg} before={prev.hours_saved_avg} unit=" h/pers." digits={1} />
+                </>
+              ) : null}
             </>
           }
         />
         <Kpi
-          label="Temps gagné déclaré"
-          value={s.pulse.hours_saved}
-          unit=" h"
-          foot={s.pulse.hours_saved === null ? "Masqué : moins de 3 réponses" : `Semaine du ${fmtWeek(s.pulse.reference_week)}`}
+          label="Niveau de compétences"
+          value={s.skills.avg}
+          unit=" / 3"
+          digits={1}
+          foot={
+            <>
+              {fmtNum(s.skills.assessed_pct)} % auto-évalués
+              {last && prev ? (
+                <>
+                  {" "}· <Delta now={last.skills_avg} before={prev.skills_avg} digits={1} />
+                </>
+              ) : null}
+            </>
+          }
         />
         <Kpi
           label="Satisfaction"
-          value={s.pulse.satisfaction}
+          value={s.feeling?.satisfaction ?? null}
           unit=" / 5"
           digits={1}
           foot={
-            s.pulse.satisfaction === null ? (
-              "Masqué : moins de 3 réponses"
-            ) : (
-              <>
-                Participation {fmtNum(s.pulse.participation)} % ·{" "}
-                <Delta now={s.pulse.satisfaction} before={before?.satisfaction ?? null} digits={1} />
-              </>
-            )
+            s.feeling
+              ? s.feeling.satisfaction === null
+                ? "Masqué : moins de 3 réponses"
+                : `${s.feeling.campaign} · ${s.feeling.respondents} réponses`
+              : "Pas encore de campagne avec ressenti"
           }
         />
       </div>
 
-      {/* --- Tendance --- */}
+      {/* --- Évolution --- */}
       <div className="card section">
         <div className="card-head" style={{ flexWrap: "wrap" }}>
-          <h2>Évolution sur 12 semaines</h2>
+          <h2>Évolution par campagne</h2>
           <div className="pills">
             {METRICS.map((x) => (
               <button key={x.key} className={`ghost small ${metric === x.key ? "on" : ""}`} onClick={() => setMetric(x.key)}>
@@ -83,20 +117,31 @@ export default function ScopeDashboard({ s, scopeLabel }: { s: ScopeStats; scope
             ))}
           </div>
         </div>
-        <TrendChart
-          label={m.label}
-          unit={m.unit}
-          digits={m.digits}
-          max={m.max}
-          points={trend.map((w) => ({
-            week: w.week,
-            value: w[metric],
-            note: `${w.respondents} réponse${w.respondents > 1 ? "s" : ""}`,
-          }))}
-        />
-        <p className="muted tiny" style={{ margin: "0.5rem 0 0" }}>
-          Source : pulse hebdomadaire. Satisfaction et heures masquées les semaines à moins de 3 réponses.
-        </p>
+        {evo.length === 0 ? (
+          <div className="empty small">
+            Pas encore de campagne. <Link href="/campagnes/nouvelle">Lance une campagne de mise à jour</Link> : chaque campagne
+            ajoute un point à cette courbe.
+          </div>
+        ) : (
+          <>
+            <TrendChart
+              label={m.label}
+              unit={m.unit}
+              digits={m.digits}
+              max={m.max}
+              points={evo.map((e) => ({
+                key: String(e.id),
+                label: shortLabel(e),
+                title: `${e.title}${e.open ? " (en cours)" : ""}`,
+                value: e[metric],
+                note: `${e.respondents} / ${e.targeted} réponses · ${fmtDay(e.date)}`,
+              }))}
+            />
+            <p className="muted tiny" style={{ margin: "0.5rem 0 0" }}>
+              Chaque point est la photo des répondants d&apos;une campagne. Satisfaction masquée sous 3 réponses.
+            </p>
+          </>
+        )}
       </div>
 
       <div className="grid g2 section">
@@ -110,15 +155,14 @@ export default function ScopeDashboard({ s, scopeLabel }: { s: ScopeStats; scope
         <div className="card">
           <div className="card-head">
             <h2>Freins remontés</h2>
-            <span className="muted small">4 dernières semaines</span>
+            <span className="muted small">{s.feeling ? s.feeling.campaign : ""}</span>
           </div>
-          {s.pulse.blockers === null ? (
-            <div className="empty small">Masqué : moins de 3 répondants sur la période.</div>
+          {!s.feeling ? (
+            <div className="empty small">Demande un ressenti dans une campagne pour voir les freins.</div>
+          ) : s.feeling.blockers === null ? (
+            <div className="empty small">Masqué : moins de 3 réponses.</div>
           ) : (
-            <BarList
-              rows={s.pulse.blockers.map((b) => ({ label: BLOCKERS[b.blocker] ?? b.blocker, value: b.count }))}
-              format={(v) => `${v}`}
-            />
+            <BarList rows={s.feeling.blockers.map((b) => ({ label: BLOCKERS[b.blocker] ?? b.blocker, value: b.count }))} format={(v) => `${v}`} />
           )}
         </div>
       </div>
@@ -186,7 +230,7 @@ export default function ScopeDashboard({ s, scopeLabel }: { s: ScopeStats; scope
               <div className="foot">{s.usecases.validated} validés</div>
             </div>
             <div className="kpi">
-              <div className="label">Gain potentiel</div>
+              <div className="label">Temps gagné</div>
               <div className="value">
                 {fmtNum(s.usecases.hours_saved_per_week)}
                 <span className="unit"> h/sem.</span>
@@ -237,16 +281,18 @@ export default function ScopeDashboard({ s, scopeLabel }: { s: ScopeStats; scope
               <strong>{openFeedback}</strong> feedback{openFeedback > 1 ? "s" : ""} en attente de réponse.
             </p>
           ) : null}
-          <h3>Verbatims récents du pulse</h3>
-          {s.pulse.comments === null ? (
-            <div className="empty small">Masqué : moins de 3 répondants.</div>
-          ) : s.pulse.comments.length === 0 ? (
+          <h3>Verbatims {s.feeling ? `— ${s.feeling.campaign}` : ""}</h3>
+          {!s.feeling ? (
+            <div className="empty small">Pas encore de ressenti collecté.</div>
+          ) : s.feeling.comments === null ? (
+            <div className="empty small">Masqué : moins de 3 réponses.</div>
+          ) : s.feeling.comments.length === 0 ? (
             <div className="empty small">Aucun commentaire.</div>
           ) : (
             <ul style={{ paddingLeft: "1.1rem", margin: 0 }}>
-              {s.pulse.comments.slice(0, 6).map((c, i) => (
+              {s.feeling.comments.slice(0, 6).map((c, i) => (
                 <li key={i} className="small" style={{ marginBottom: "0.4rem" }}>
-                  « {c.text} » <span className="muted tiny">— sem. du {fmtWeek(c.week)}</span>
+                  « {c} »
                 </li>
               ))}
             </ul>
@@ -278,9 +324,7 @@ function SkillDistribution({ domains }: { domains: ScopeStats["skills"]["domains
                   <span className="bar-seg" style={{ width: "100%", background: "var(--seq-empty)" }} />
                 ) : (
                   d.dist.map((n, i) =>
-                    n > 0 ? (
-                      <span key={i} className="bar-seg" style={{ width: `${(100 * n) / total}%`, background: DIST_COLORS[i] }} />
-                    ) : null,
+                    n > 0 ? <span key={i} className="bar-seg" style={{ width: `${(100 * n) / total}%`, background: DIST_COLORS[i] }} /> : null,
                   )
                 )}
               </span>

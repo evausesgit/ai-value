@@ -19,8 +19,8 @@ class Settings(BaseSettings):
 
     invite_days: int = 14
 
-    # En dessous de ce nombre de répondants, les agrégats de pulse (satisfaction,
-    # freins, temps gagné) d'une équipe sont masqués : personne n'est identifiable.
+    # En dessous de ce nombre de répondants, les agrégats de ressenti (satisfaction,
+    # freins, verbatims) d'une équipe sont masqués : personne n'est identifiable.
     min_group_size: int = 3
 
 

@@ -15,7 +15,8 @@ interface TeamStats extends ScopeStats {
     name: string;
     job: string;
     role: string;
-    pulses_4w: number;
+    campaigns: number;
+    assessed: boolean;
     active_tools: number;
     usecases: number;
     quiz_pct: number | null;
@@ -84,7 +85,7 @@ function Team() {
       <div className="card section">
         <div className="card-head">
           <h2>Membres</h2>
-          <span className="muted small">Activité uniquement — les réponses au pulse restent anonymes</span>
+          <span className="muted small">Activité uniquement — le ressenti reste anonyme</span>
         </div>
         <div className="table-wrap">
           <table>
@@ -92,7 +93,8 @@ function Team() {
               <tr>
                 <th>Nom</th>
                 <th>Métier</th>
-                <th className="num">Pulses (4 sem.)</th>
+                <th className="num">Campagnes répondues</th>
+                <th>Auto-évalué</th>
                 <th className="num">Outils actifs</th>
                 <th className="num">Use cases</th>
                 <th className="num">Quiz</th>
@@ -105,7 +107,8 @@ function Team() {
                     {r.name} {r.role !== "member" ? <span className="pill">{ROLES[r.role]}</span> : null}
                   </td>
                   <td className="muted">{r.job}</td>
-                  <td className="num">{r.pulses_4w} / 4</td>
+                  <td className="num">{r.campaigns}</td>
+                  <td>{r.assessed ? "✓" : <span className="muted">—</span>}</td>
                   <td className="num">{r.active_tools}</td>
                   <td className="num">{r.usecases}</td>
                   <td className="num">{r.quiz_pct === null ? "—" : `${r.quiz_pct} %`}</td>

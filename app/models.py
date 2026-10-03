@@ -13,7 +13,6 @@ from sqlalchemy import (
     Boolean,
     Date,
     DateTime,
-    Float,
     ForeignKey,
     Integer,
     String,
@@ -125,24 +124,61 @@ class ToolUsage(Base):
     )
 
 
-class Pulse(Base):
-    """Check-in hebdomadaire (une ligne par utilisateur et par semaine, lundi = clé)."""
+class Campaign(Base):
+    """Demande de mise à jour lancée par un lead ou le management.
 
-    __tablename__ = "pulses"
-    __table_args__ = (UniqueConstraint("user_id", "week"),)
+    Chaque participant met à jour ce qui est demandé (`items`), puis envoie :
+    on photographie alors son état dans `CampaignParticipant`. Une campagne =
+    un point sur les courbes d'évolution.
+    """
+
+    __tablename__ = "campaigns"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     org_id: Mapped[int] = mapped_column(ForeignKey("orgs.id", ondelete="CASCADE"), index=True)
-    # Équipe au moment de la réponse : l'historique ne bouge pas si l'on change d'équipe.
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    title: Mapped[str] = mapped_column(String(160))
+    message: Mapped[str] = mapped_column(Text, default="")
+    # Équipes visées ; liste vide = toute l'organisation.
+    team_ids: Mapped[list] = mapped_column(JSON, default=list)
+    items: Mapped[list] = mapped_column(JSON, default=list)  # cf. app.catalog.CAMPAIGN_ITEMS
+    opens_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    closes_on: Mapped[date] = mapped_column(Date)
+    closed: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    author: Mapped[User | None] = relationship(foreign_keys=[created_by], lazy="joined")
+
+
+class CampaignParticipant(Base):
+    """Une personne visée par une campagne, et la photo de son état à l'envoi."""
+
+    __tablename__ = "campaign_participants"
+    __table_args__ = (UniqueConstraint("campaign_id", "user_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    campaign_id: Mapped[int] = mapped_column(
+        ForeignKey("campaigns.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    # Équipe au moment de la campagne : l'historique ne bouge pas si l'on change d'équipe.
     team_id: Mapped[int | None] = mapped_column(ForeignKey("teams.id", ondelete="SET NULL"))
-    week: Mapped[date] = mapped_column(Date, index=True)
-    usage_level: Mapped[int] = mapped_column(Integer)  # 0..4, cf. app.catalog.USAGE_LEVELS
-    hours_saved: Mapped[float] = mapped_column(Float, default=0)
-    satisfaction: Mapped[int] = mapped_column(Integer)  # 1..5
+    done_items: Mapped[list] = mapped_column(JSON, default=list)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # --- Photo à l'envoi ---
+    tools: Mapped[dict] = mapped_column(JSON, default=dict)  # nom d'outil → fréquence
+    active_tools: Mapped[int] = mapped_column(Integer, default=0)
+    skills: Mapped[dict] = mapped_column(JSON, default=dict)  # domaine → niveau
+    usecases: Mapped[int] = mapped_column(Integer, default=0)  # publiés par la personne
+    adopted: Mapped[int] = mapped_column(Integer, default=0)  # use cases d'autres adoptés
+    # Temps gagné par semaine : ses use cases + ceux qu'elle a adoptés.
+    minutes_saved: Mapped[int] = mapped_column(Integer, default=0)
+    # Ressenti (facultatif selon la campagne).
+    usage_level: Mapped[int | None] = mapped_column(Integer)  # 0..4
+    satisfaction: Mapped[int | None] = mapped_column(Integer)  # 1..5
     blockers: Mapped[list] = mapped_column(JSON, default=list)
     comment: Mapped[str] = mapped_column(Text, default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 # --- Connaissances ---------------------------------------------------------

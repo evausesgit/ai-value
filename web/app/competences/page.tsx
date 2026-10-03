@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { DOMAINS, DOMAIN_KEYS, SKILL_HINTS, SKILL_LEVELS } from "@/lib/catalog";
+import SkillsEditor from "@/components/SkillsEditor";
+import { DOMAINS } from "@/lib/catalog";
 import { hasRole, useSession } from "@/lib/session";
 
 interface QuizItem {
@@ -19,21 +20,12 @@ interface QuizItem {
 
 export default function SkillsPage() {
   const { me } = useSession();
-  const [levels, setLevels] = useState<Record<string, number>>({});
   const [quizzes, setQuizzes] = useState<QuizItem[]>([]);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    api<Record<string, number>>("/skills").then(setLevels);
     api<QuizItem[]>("/quizzes").then(setQuizzes);
   }, []);
-
-  async function setLevel(domain: string, level: number) {
-    setLevels((l) => ({ ...l, [domain]: level }));
-    setSaved(false);
-    await api("/skills", { method: "PUT", body: { [domain]: level } });
-    setSaved(true);
-  }
 
   async function removeQuiz(id: number) {
     if (!confirm("Retirer ce quiz ?")) return;
@@ -55,27 +47,7 @@ export default function SkillsPage() {
           <h2>Mon auto-évaluation</h2>
           {saved ? <span className="pill good">✓ Enregistré</span> : null}
         </div>
-        <div className="legend" style={{ marginTop: 0, marginBottom: "1rem" }}>
-          {SKILL_LEVELS.map((l, i) => (
-            <span key={l}>
-              <strong>{l}</strong> : {SKILL_HINTS[i]}
-            </span>
-          ))}
-        </div>
-        {DOMAIN_KEYS.map((d) => (
-          <div key={d} style={{ padding: "0.7rem 0", borderTop: "1px solid var(--grid)" }}>
-            <div style={{ marginBottom: "0.45rem" }}>
-              <strong>{DOMAINS[d].label}</strong> <span className="muted small">— {DOMAINS[d].hint}</span>
-            </div>
-            <div className="scale s4">
-              {SKILL_LEVELS.map((l, i) => (
-                <button key={l} type="button" className={levels[d] === i ? "on" : ""} onClick={() => setLevel(d, i)}>
-                  {l}
-                </button>
-              ))}
-            </div>
-          </div>
-        ))}
+        <SkillsEditor onSaved={() => setSaved(true)} />
       </div>
 
       <div className="section" id="quiz">

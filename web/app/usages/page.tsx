@@ -15,7 +15,7 @@ function UseCases() {
   const [category, setCategory] = useState("");
   const [teamId, setTeamId] = useState("");
   const [sort, setSort] = useState("recent");
-  const [mine, setMine] = useState(false);
+  const [mine, setMine] = useState(!!params.get("mine"));
   const tool = params.get("tool") ?? "";
 
   useEffect(() => {

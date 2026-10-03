@@ -25,6 +25,7 @@ export default function Nav() {
     { href: "/usages", label: "Use cases", show: true },
     { href: "/competences", label: "Compétences", show: true },
     { href: "/feedback", label: "Feedback", show: true },
+    { href: "/campagnes", label: "Campagnes", show: hasRole(me, "lead") },
     { href: "/equipe", label: "Mon équipe", show: hasRole(me, "lead") },
     { href: "/organisation", label: "Organisation", show: hasRole(me, "manager") },
     { href: "/admin", label: "Admin", show: hasRole(me, "admin") || hasRole(me, "lead") },

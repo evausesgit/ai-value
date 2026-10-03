@@ -12,11 +12,14 @@ FREQUENCIES = ["daily", "weekly", "monthly", "tried"]
 # Fréquences qui comptent comme « utilisateur actif » dans le taux d'adoption.
 ACTIVE_FREQUENCIES = {"daily", "weekly"}
 
-# Pulse : « Cette semaine, à quelle fréquence as-tu utilisé l'IA ? »
+# Ce qu'une campagne peut demander de mettre à jour.
+CAMPAIGN_ITEMS = ["tools", "skills", "usecases", "checkin"]
+
+# Ressenti : « En ce moment, à quelle fréquence utilises-tu l'IA ? »
 USAGE_LEVELS = {
-    0: "Pas du tout",
-    1: "Une ou deux fois",
-    2: "Plusieurs fois",
+    0: "Jamais",
+    1: "Rarement",
+    2: "Chaque semaine",
     3: "Tous les jours",
     4: "Plusieurs fois par jour",
 }
