@@ -45,6 +45,11 @@ En production : `docker exec -it <conteneur api> python -m scripts.admin …`.
 
 ## Déploiement
 
+**Chez un client (sur ses serveurs, avec ses données)** : voir [`docs/DEPLOYING.md`](docs/DEPLOYING.md)
+(en anglais, pour la DSI : architecture, données stockées, sécurité, installation locale ou
+serveur avec `docker-compose.local.yml`, exploitation, checklist RGPD).
+
+**Notre instance hébergée** :
 Coolify, build `docker-compose.yml` : seul `web` est exposé, et `api` et `db` restent internes.
 Variables : `DB_PASSWORD`, `INTERNAL_API_TOKEN`.
 

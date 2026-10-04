@@ -14,6 +14,7 @@ import argparse
 import os
 import secrets
 
+from email_validator import EmailNotValidError, validate_email
 from sqlalchemy import func, select
 
 from app.db import SessionLocal
@@ -22,14 +23,27 @@ from app.provisioning import create_invite, create_org, ensure_library
 from app.security import hash_password
 
 
+def _checked_email(email: str | None) -> str | None:
+    """Même validation que l'API : sinon l'invitation créée serait inutilisable."""
+    if email is None:
+        return None
+    try:
+        return validate_email(email, check_deliverability=False).normalized.lower()
+    except EmailNotValidError as exc:
+        raise SystemExit(f"Email invalide ({email}) : {exc}") from None
+
+
 def _base_url() -> str:
     return os.environ.get("PUBLIC_URL", "https://aivalue.ia-do-it.com").rstrip("/")
 
 
 def cmd_create_org(args: argparse.Namespace) -> None:
+    _checked_email(args.admin_email)
     with SessionLocal() as session:
         org = create_org(session, args.name)
-        _, token = create_invite(session, org_id=org.id, role="admin", email=args.admin_email)
+        _, token = create_invite(
+            session, org_id=org.id, role="admin", email=_checked_email(args.admin_email)
+        )
         session.commit()
         print(f"Organisation « {org.name} » créée (slug {org.slug}).")
         print(f"Invitation admin : {_base_url()}/invitation/{token}")
@@ -44,7 +58,7 @@ def cmd_create_user(args: argparse.Namespace) -> None:
         team = None
         if args.team:
             team = session.scalar(select(Team).where(Team.org_id == org.id, Team.name == args.team))
-        email = args.email.lower()
+        email = _checked_email(args.email)
         user = session.scalar(select(User).where(func.lower(User.email) == email))
         if user is None:
             user = User(org_id=org.id, email=email)

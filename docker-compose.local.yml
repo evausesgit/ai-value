@@ -1,0 +1,28 @@
+# AI Value — local / on-premise override (see docs/DEPLOYING.md).
+#
+# Use it ON TOP of docker-compose.yml:
+#   docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
+#
+# What it changes compared to the hosted (Coolify) setup:
+#   - publishes the web front on the host (default: 127.0.0.1:3000, this machine only);
+#   - lets the session cookie work over plain http://localhost (COOKIE_SECURE=false);
+#   - makes invitation links printed by the admin CLI point to PUBLIC_URL.
+#
+# Variables (in a .env file next to this one):
+#   DB_PASSWORD          PostgreSQL password                     (required)
+#   INTERNAL_API_TOKEN   shared secret between web and api       (required)
+#   PUBLIC_URL           URL people use to open the app          (default http://localhost:3000)
+#   WEB_BIND             host interface to publish on            (default 127.0.0.1 = this machine only;
+#                        a reverse proxy on the same host keeps 127.0.0.1)
+#   WEB_PORT             host port                               (default 3000)
+#   COOKIE_SECURE        true as soon as the app is served over HTTPS (default false)
+
+services:
+  api:
+    environment:
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:3000}
+
+  web:
+    ports:
+      - "${WEB_BIND:-127.0.0.1}:${WEB_PORT:-3000}:3000"
