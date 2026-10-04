@@ -4,7 +4,7 @@
         → crée l'organisation et affiche le lien d'invitation du premier admin
     python -m scripts.admin create-user email@x.fr --org-slug acme --role admin \
         [--superadmin] [--password ...]     (mot de passe généré si absent)
-    python -m scripts.admin demo --admin-email eva@x.fr [--password ...]
+    python -m scripts.admin demo --admin-email eva@x.fr [--password ...] [--lang en] [--no-superadmin]
         → organisation de démonstration remplie (idempotent : ne fait rien si elle existe)
 """
 
@@ -63,18 +63,24 @@ def cmd_create_user(args: argparse.Namespace) -> None:
 
 
 def cmd_demo(args: argparse.Namespace) -> None:
-    from scripts.demo_data import DEMO_NAME, seed_demo, seed_demo_campaigns
+    from scripts.demo_data import content, seed_demo, seed_demo_campaigns
 
     with SessionLocal() as session:
         ensure_library(session)
-        org = session.scalar(select(Org).where(Org.name == DEMO_NAME))
+        org = session.scalar(select(Org).where(Org.name == content(args.lang).DEMO_NAME))
         if org is None:
-            seed_demo(session, admin_email=args.admin_email, admin_password=args.password)
+            seed_demo(
+                session,
+                admin_email=args.admin_email,
+                admin_password=args.password,
+                lang=args.lang,
+                superadmin=not args.no_superadmin,
+            )
             return
         # Démo existante : on complète seulement ce qui manque (campagnes).
         email = args.admin_email.lower()
         requester = session.scalar(select(User).where(func.lower(User.email) == email))
-        n = seed_demo_campaigns(session, org, requester)
+        n = seed_demo_campaigns(session, org, requester, args.lang)
         session.commit()
         print(f"Démo déjà présente : {n} campagne(s) ajoutée(s).")
 
@@ -101,6 +107,8 @@ def main() -> None:
     p = sub.add_parser("demo")
     p.add_argument("--admin-email", required=True)
     p.add_argument("--password")
+    p.add_argument("--lang", default="fr", choices=["fr", "en"])
+    p.add_argument("--no-superadmin", action="store_true")
     p.set_defaults(func=cmd_demo)
 
     args = parser.parse_args()

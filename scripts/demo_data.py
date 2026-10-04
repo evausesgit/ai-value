@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import random
 import secrets
+import sys
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select
@@ -33,6 +34,7 @@ from app.security import hash_password
 
 DEMO_NAME = "Acme Industries (démo)"
 DEMO_DOMAIN = "demo.acme.test"
+ADMIN_NAME = None  # nom tiré de l'email de l'admin
 
 # équipe → (propension à adopter 0..1, métiers, outils de prédilection)
 TEAMS: dict[str, tuple[float, list[str], list[str]]] = {
@@ -546,39 +548,66 @@ FEEDBACKS = [
 ]
 
 
+def campaign_title(month: str) -> str:
+    return f"Point IA d'{month}" if month[0] in "aeiou" else f"Point IA de {month}"
+
+
+CAMPAIGN_MESSAGE = (
+    "Prends 5 minutes pour mettre à jour tes outils, ton auto-évaluation et tes use cases : "
+    "c'est ce qui nous permet de mesurer le temps gagné et d'organiser les bonnes formations. "
+    "Merci !"
+)
+
+
+def content(lang: str):
+    """Textes de la démo : ce module (fr) ou scripts.demo_data_en (en)."""
+    if lang == "en":
+        from scripts import demo_data_en
+
+        return demo_data_en
+    return sys.modules[__name__]
+
+
 def _clamp(x: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, x))
 
 
-def seed_demo(session: Session, admin_email: str, admin_password: str | None) -> None:
-    if session.scalar(select(Org).where(Org.name == DEMO_NAME)):
+def seed_demo(
+    session: Session,
+    admin_email: str,
+    admin_password: str | None,
+    lang: str = "fr",
+    superadmin: bool = True,
+) -> None:
+    txt = content(lang)
+    if session.scalar(select(Org).where(Org.name == txt.DEMO_NAME)):
         print("Organisation de démo déjà présente : rien à faire.")
         return
     rnd = random.Random(42)
-    org = create_org(session, DEMO_NAME)
+    org = create_org(session, txt.DEMO_NAME)
     tools = {t.name: t for t in session.scalars(select(Tool).where(Tool.org_id == org.id))}
     teams: dict[str, Team] = {}
-    for name in TEAMS:
+    for name in txt.TEAMS:
         teams[name] = Team(org_id=org.id, name=name)
         session.add(teams[name])
     session.flush()
 
     # --- Personnes ---
     people: list[tuple[User, float, str]] = []
-    names = [(f, la) for f in FIRST for la in LAST]
+    names = [(f, la) for f in txt.FIRST for la in txt.LAST]
     rnd.shuffle(names)
     used = 0
-    for team_name, (prop, jobs, _) in TEAMS.items():
-        for i in range(SIZES[team_name]):
+    for team_name, (prop, jobs, _) in txt.TEAMS.items():
+        for i in range(txt.SIZES[team_name]):
             first, last = names[used]
             used += 1
             role = "lead" if i == 0 else "member"
-            if team_name == "Direction":
+            if team_name == next(iter(txt.TEAMS)):
                 role = "manager"
             u = User(
                 org_id=org.id,
                 team_id=teams[team_name].id,
-                email=f"{slugify(first)}.{slugify(last)}.{used}@{DEMO_DOMAIN}",
+                email=f"{slugify(first)}.{slugify(last)}.{used}@{txt.DEMO_DOMAIN}",
                 name=f"{first} {last}",
                 job=jobs[i % len(jobs)],
                 role=role,
@@ -591,17 +620,19 @@ def seed_demo(session: Session, admin_email: str, admin_password: str | None) ->
     admin = session.scalar(select(User).where(func.lower(User.email) == email))
     password = admin_password or secrets.token_urlsafe(12)
     if admin is None:
-        admin = User(email=email, name=email.split("@")[0].split(".")[0].capitalize())
+        admin = User(
+            email=email, name=txt.ADMIN_NAME or email.split("@")[0].split(".")[0].capitalize()
+        )
         session.add(admin)
-    admin.org_id, admin.team_id, admin.role = org.id, teams["Direction"].id, "admin"
-    admin.is_superadmin, admin.active = True, True
+    admin.org_id, admin.team_id, admin.role = org.id, teams[next(iter(txt.TEAMS))].id, "admin"
+    admin.is_superadmin, admin.active, admin.lang = superadmin, True, lang
     admin.job = admin.job or "Responsable transformation IA"
     admin.password_hash = hash_password(password)
     session.flush()
 
     # --- Outils déclarés ---
     for u, prop, team_name in people:
-        favs = TEAMS[team_name][2]
+        favs = txt.TEAMS[team_name][2]
         # Le premier outil de prédilection décide de l'adoption ; les suivants sont plus rares.
         for rank, tname in enumerate(favs):
             r = rnd.random() * (1 + rank * 0.6)
@@ -649,7 +680,7 @@ def seed_demo(session: Session, admin_email: str, admin_password: str | None) ->
     for u, _, team_name in people:
         by_team.setdefault(team_name, []).append(u)
     for i, (team_name, title, cat, problem, solution, prompt, tnames, minutes, risk) in enumerate(
-        USE_CASES
+        txt.USE_CASES
     ):
         author = rnd.choice(by_team[team_name])
         uc = UseCase(
@@ -678,7 +709,7 @@ def seed_demo(session: Session, admin_email: str, admin_password: str | None) ->
                 session.add(UseCaseReaction(use_case_id=uc.id, user_id=u.id, kind="adopt"))
 
     # --- Feedback ---
-    for team_name, kind, text, anonymous, status, response in FEEDBACKS:
+    for team_name, kind, text, anonymous, status, response in txt.FEEDBACKS:
         author = rnd.choice(by_team[team_name])
         session.add(
             Feedback(
@@ -695,10 +726,12 @@ def seed_demo(session: Session, admin_email: str, admin_password: str | None) ->
         )
 
     session.flush()
-    seed_demo_campaigns(session, org, admin)
+    seed_demo_campaigns(session, org, admin, lang)
 
     session.commit()
-    print(f"Démo « {DEMO_NAME} » créée : {len(people)} personnes, {len(USE_CASES)} use cases.")
+    print(
+        f"Démo « {txt.DEMO_NAME} » créée : {len(people)} personnes, {len(txt.USE_CASES)} use cases."
+    )
     print(f"Admin : {email}")
     if not admin_password:
         print(f"Mot de passe : {password}")
@@ -728,12 +761,13 @@ CAMPAIGN_PLAN = [
 ]
 
 
-def seed_demo_campaigns(session: Session, org: Org, requester: User) -> int:
+def seed_demo_campaigns(session: Session, org: Org, requester: User, lang: str = "fr") -> int:
     """Campagnes passées + une en cours, reconstituées depuis l'état actuel déclaré.
 
     Idempotent : ne fait rien si l'organisation a déjà des campagnes. Les comptes
     réels (hors domaine de démo) sont visés par la campagne en cours, sans réponse.
     """
+    txt = content(lang)
     if session.scalar(select(func.count()).where(Campaign.org_id == org.id)):
         return 0
     rnd = random.Random(7)
@@ -764,15 +798,12 @@ def seed_demo_campaigns(session: Session, org: Org, requester: User) -> int:
         opens = today - timedelta(days=days_ago)
         current = k == n_plan - 1
         progress = k / (n_plan - 1)
-        month = MONTHS[opens.month - 1]
-        title = f"Point IA d'{month}" if month[0] in "aeiou" else f"Point IA de {month}"
+        title = txt.campaign_title(txt.MONTHS[opens.month - 1])
         c = Campaign(
             org_id=org.id,
             created_by=requester.id,
             title=title,
-            message="Prends 5 minutes pour mettre à jour tes outils, ton auto-évaluation et "
-            "tes use cases : c'est ce qui nous permet de mesurer le temps gagné et "
-            "d'organiser les bonnes formations. Merci !",
+            message=txt.CAMPAIGN_MESSAGE,
             team_ids=[],
             items=items,
             opens_at=opens,
@@ -784,7 +815,7 @@ def seed_demo_campaigns(session: Session, org: Org, requester: User) -> int:
         session.add(c)
         session.flush()
         for u in users:
-            demo = u.email.endswith(f"@{DEMO_DOMAIN}")
+            demo = u.email.endswith(f"@{txt.DEMO_DOMAIN}")
             p = CampaignParticipant(campaign_id=c.id, user_id=u.id, team_id=u.team_id)
             session.add(p)
             if not demo:
@@ -838,7 +869,7 @@ def seed_demo_campaigns(session: Session, org: Org, requester: User) -> int:
                         rnd.sample(["qualite", "temps", "securite", "pertinence"], 1)
                     )
                 if rnd.random() < 0.15:
-                    p.comment = rnd.choice(COMMENTS)
+                    p.comment = rnd.choice(txt.COMMENTS)
             p.done_items = list(items)
             p.completed_at = opens + timedelta(
                 days=rnd.randint(0, 9 if not current else 2), hours=rnd.randint(8, 18)
